@@ -337,12 +337,16 @@ input,textarea{font-family:inherit}
 .edit-list{display:flex;flex-direction:column;gap:7px;margin-bottom:18px}
 .edit-row{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;background:var(--surface-2)}
 .edit-row .info{flex:1;min-width:0}
-.edit-row .nm{font-size:12.5px;font-weight:700}
-.edit-row .rl{font-size:11px;color:var(--muted);margin-top:2px}
+.edit-row .info{display:flex;flex-direction:column}
+.edit-row .nm{font-size:12.5px;font-weight:700;display:block}
+.edit-row .rl{font-size:11px;color:var(--muted);margin-top:2px;display:block}
 .edit-row .btns{display:flex;gap:2px}
 .add-box{border-top:1px dashed var(--line-2);padding-top:14px}
 .add-box h4{margin:0 0 10px;font-size:12.5px}
-.add-grid{display:grid;grid-template-columns:70px 1fr;gap:7px}
+.add-grid{display:grid;grid-template-columns:74px 1fr;gap:7px}
+#new-name{grid-column:2}
+#new-role{grid-column:1 / -1}
+#new-pin{grid-column:1 / -1;letter-spacing:.25em}
 .inp{border:1px solid var(--line-2);border-radius:10px;padding:10px 11px;font-size:13px;outline:none;background:#fff;min-width:0;transition:.15s}
 .inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,96,63,.1)}
 .emoji-inp{text-align:center;font-size:17px;padding:8px}

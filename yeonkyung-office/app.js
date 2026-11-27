@@ -846,6 +846,7 @@
     db.ref('rooms').on('value', snap => {
       state.rooms = snap.val() || {};
       if (!state.me) return;
+      state.seen[state.room] = Date.now(); saveSeen();
       const msgs = (state.rooms[state.room] || {}).messages || {};
       const box = el('messages');
       const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
