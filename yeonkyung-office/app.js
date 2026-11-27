@@ -32,7 +32,7 @@
     maxImages: 2          // 한 번에 AI에게 보여 줄 사진 장수
   };
 
-  const APP_VERSION = '20';
+  const APP_VERSION = '21';
   const DEFAULT_AI = 'hyuni';            // 멘션이 없을 때 먼저 답하는 기본 비서
   const ALL_RE = /@\s?(all|전체|모두|전원)/i;
 
@@ -1068,7 +1068,7 @@
       const row = document.createElement('div');
       row.className = 'member-row' + (online ? ' online' : '');
       const meTag = state.me && state.me.id === m.id ? '<span class="me-tag">나</span>' : '';
-      const statusText = online ? '온라인' : fmtLastSeen(p.lastSeen);
+      const statusText = online ? '온라인' : (m.kind === 'ai' ? '대기 중' : fmtLastSeen(p.lastSeen));
       row.innerHTML =
         '<span class="avatar" style="--c:' + esc(m.color || '#8d8377') + '">' + esc(initials(m)) + '</span>' +
         '<span class="info"><span class="nm">' + esc(m.name) + meTag + '</span>' +
@@ -1334,6 +1334,9 @@
         ? '대표님 · 모든 방과 결재를 총괄합니다.'
         : (AI_TRAITS[m.id] || '방에서 이름을 부르면 자기 역할로 답합니다.');
       const last = state.presence[m.id] ? fmtLastSeen(state.presence[m.id].lastSeen) : '오프라인';
+      const stateTxt = isOnline(m.id)
+        ? (isHuman ? '온라인' : '대기 중 · 부르면 바로 답합니다')
+        : (isHuman ? last : '대기 중 · 부르면 바로 답합니다');
       card.innerHTML =
         '<span class="avatar" style="--c:' + esc(m.color || '#8d8377') + '">' + esc(initials(m)) + '</span>' +
         '<div class="sinfo">' +
@@ -1343,7 +1346,7 @@
           '</div>' +
           '<div class="srole">' + esc(m.role || '') + ' · ' + (isHuman ? '사람' : 'Gemini 공유 엔진') + '</div>' +
           '<div class="sdesc">' + esc(desc) + '</div>' +
-          '<div class="sstate"><span class="d"></span>' + (online ? '온라인 · 언제든 호출 가능' : last) + '</div>' +
+          '<div class="sstate"><span class="d"></span>' + esc(stateTxt) + '</div>' +
         '</div>';
       grid.appendChild(card);
     });
