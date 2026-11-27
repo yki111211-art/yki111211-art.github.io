@@ -32,7 +32,7 @@
     maxImages: 2          // 한 번에 AI에게 보여 줄 사진 장수
   };
 
-  const APP_VERSION = '21';
+  const APP_VERSION = '25';
   const DEFAULT_AI = 'hyuni';            // 멘션이 없을 때 먼저 답하는 기본 비서
   const ALL_RE = /@\s?(all|전체|모두|전원)/i;
 
