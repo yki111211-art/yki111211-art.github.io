@@ -295,7 +295,7 @@
     typingClearTimer = setTimeout(() => {
       db.ref('typing/' + state.room + '/' + m.id).remove().catch(() => {});
       lastTypingWrite = 0;
-    }, 3500);
+    }, 6000);
   }
 
   /* ── 방 이동 ──────────────────────────────────── */
