@@ -25,9 +25,23 @@
      API 키는 Worker 서버에만 있고 브라우저로 내려오지 않습니다. */
   const AI_ENGINE = {
     proxy: 'https://yk-gemini.yeonkyung-office.workers.dev/',
-    contextSize: 12,      // 방에서 함께 보낼 최근 메시지 수
+    contextSize: 14,      // 방에서 함께 보낼 최근 메시지 수
     maxPerMessage: 2,     // 한 메시지에 최대 몇 명까지 답할지
-    timeoutMs: 35000
+    timeoutMs: 45000,
+    allGapMs: 600,        // 전원응답 시 AI 사이 호출 간격(429 방지)
+    maxImages: 2          // 한 번에 AI에게 보여 줄 사진 장수
+  };
+
+  const APP_VERSION = '19';
+  const DEFAULT_AI = 'hyuni';            // 멘션이 없을 때 먼저 답하는 기본 비서
+  const ALL_RE = /@\s?(all|전체|모두|전원)/i;
+
+  /* ── 첨부(사진·파일) 설정 ───────────────────── */
+  const ATT = {
+    maxEdge: 1280,        // 이미지 긴 쪽 최대 px
+    quality: 0.8,         // JPEG 품질
+    maxFileBytes: 2 * 1024 * 1024,   // 일반 파일 2MB까지
+    maxItems: 6           // 한 메시지에 붙일 수 있는 개수
   };
 
   /* ── 고정 데이터 ─────────────────────────────── */
@@ -88,7 +102,10 @@
   const state = {
     members: {}, list: [], presence: {}, rooms: {}, typing: {},
     me: null, room: 'council', reply: null, pendingId: null,
-    seen: {}, booted: false, connected: true
+    seen: {}, booted: false, connected: true,
+    pending: [],            // 보내기 전에 붙여 둔 첨부
+    fileCache: {},          // 첨부 id → data URL
+    fileLoading: {}
   };
   window.__yk = state;
 
@@ -156,10 +173,188 @@
     document.body.removeChild(ta);
   }
 
+  /* ── 첨부(사진·파일) 도우미 ─────────────────── */
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  function normFiles(f) {
+    if (!f) return [];
+    if (Array.isArray(f)) return f.filter(Boolean);
+    return Object.keys(f).map(k => f[k]).filter(Boolean);
+  }
+  function sizeLabel(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + 'B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + 'KB';
+    return (n / (1024 * 1024)).toFixed(1) + 'MB';
+  }
+  function isImageFile(f) { return !!(f && /^image\//.test(f.type || '')); }
+  function readAsDataURL(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result || ''));
+      r.onerror = () => rej(r.error || new Error('read_failed'));
+      r.readAsDataURL(file);
+    });
+  }
+  function loadImageEl(src) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error('decode_failed'));
+      img.src = src;
+    });
+  }
+  async function compressImage(file) {
+    const raw = await readAsDataURL(file);
+    const img = await loadImageEl(raw);
+    const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
+    if (!w0 || !h0) throw new Error('no_size');
+    const scale = Math.min(1, ATT.maxEdge / Math.max(w0, h0));
+    const w = Math.max(1, Math.round(w0 * scale)), h = Math.max(1, Math.round(h0 * scale));
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    let out = cv.toDataURL('image/jpeg', ATT.quality);
+    if (!out || out.length < 40) out = raw;
+    return { data: out, w: w, h: h, type: 'image/jpeg' };
+  }
+  function dataUrlBytes(d) {
+    const i = String(d || '').indexOf(',');
+    if (i < 0) return String(d || '').length;
+    return Math.floor((String(d).length - i - 1) * 0.75);
+  }
+
+  async function addFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    for (const f of files) {
+      if (state.pending.length >= ATT.maxItems) { toast('첨부는 한 번에 ' + ATT.maxItems + '개까지입니다'); break; }
+      const id = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      try {
+        if (isImageFile(f)) {
+          let c;
+          try { c = await compressImage(f); }
+          catch (e) {
+            if (f.size > ATT.maxFileBytes) { toast('사진을 읽지 못했습니다: ' + f.name); continue; }
+            c = { data: await readAsDataURL(f), w: 0, h: 0, type: f.type || 'image/*' };
+          }
+          state.pending.push({
+            id: id, kind: 'image', name: f.name || ('사진-' + Date.now() + '.jpg'),
+            type: c.type, size: dataUrlBytes(c.data), w: c.w, h: c.h, data: c.data
+          });
+        } else {
+          if (f.size > ATT.maxFileBytes) { toast('파일은 2MB까지 올릴 수 있어요: ' + f.name); continue; }
+          state.pending.push({
+            id: id, kind: 'file', name: f.name || '파일', type: f.type || '',
+            size: f.size, w: 0, h: 0, data: await readAsDataURL(f)
+          });
+        }
+      } catch (e) {
+        console.warn('attach fail', f && f.name, e);
+        toast('첨부하지 못했습니다: ' + ((f && f.name) || '파일'));
+      }
+    }
+    renderPending();
+  }
+
+  function fileIcon(name) {
+    const ext = String(name || '').split('.').pop().toLowerCase();
+    if (ext === 'pdf') return '📕';
+    if (['doc', 'docx', 'hwp', 'hwpx', 'txt', 'rtf'].indexOf(ext) >= 0) return '📄';
+    if (['xls', 'xlsx', 'csv'].indexOf(ext) >= 0) return '📊';
+    if (['zip', 'rar', '7z'].indexOf(ext) >= 0) return '🗜️';
+    if (['ppt', 'pptx'].indexOf(ext) >= 0) return '📽️';
+    return '📎';
+  }
+
+  function renderPending() {
+    const strip = el('attach-strip');
+    const btn = el('btn-attach');
+    strip.innerHTML = '';
+    if (!state.pending.length) { strip.classList.add('hidden'); btn.classList.remove('has'); return; }
+    strip.classList.remove('hidden'); btn.classList.add('has');
+    state.pending.forEach((a, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'att-chip';
+      chip.innerHTML =
+        (a.kind === 'image'
+          ? '<img class="thumb" src="' + esc(a.data) + '" alt="">'
+          : '<span class="fic">' + fileIcon(a.name) + '</span>') +
+        '<span class="c-info"><span class="c-nm">' + esc(a.name) + '</span>' +
+        '<span class="c-sz">' + esc(sizeLabel(a.size)) + '</span></span>' +
+        '<button class="c-x" type="button" aria-label="빼기">✕</button>';
+      chip.querySelector('.c-x').addEventListener('click', () => { state.pending.splice(i, 1); renderPending(); });
+      strip.appendChild(chip);
+    });
+  }
+
+  function getFileData(id) {
+    if (!id) return Promise.resolve('');
+    if (state.fileCache[id]) return Promise.resolve(state.fileCache[id]);
+    if (state.fileLoading[id]) return state.fileLoading[id];
+    const p = db.ref('files/' + id + '/data').once('value')
+      .then(s => { const v = String(s.val() || ''); if (v) state.fileCache[id] = v; return v; })
+      .catch(() => '')
+      .then(v => { delete state.fileLoading[id]; return v; });
+    state.fileLoading[id] = p;
+    return p;
+  }
+
+  function dataUrlToBlob(d) {
+    const m = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(String(d || ''));
+    if (!m) return null;
+    const mime = m[1] || 'application/octet-stream';
+    const body = m[3] || '';
+    try {
+      if (m[2]) {
+        const bin = atob(body);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return new Blob([arr], { type: mime });
+      }
+      return new Blob([decodeURIComponent(body)], { type: mime });
+    } catch (e) { return null; }
+  }
+
+  function downloadAttachment(att) {
+    return getFileData(att.id).then(d => {
+      if (!d) { toast('파일을 불러오지 못했어요. 잠시 뒤 다시 눌러 주세요.'); return; }
+      const blob = dataUrlToBlob(d);
+      if (!blob) { toast('파일을 열지 못했어요.'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = att.name || 'download';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 5000);
+    });
+  }
+
+  let lbAtt = null;
+  function openLightbox(att) {
+    lbAtt = att;
+    el('lb-name').textContent = att.name || '사진';
+    const img = el('lb-img');
+    img.src = '';
+    el('lightbox').classList.remove('hidden');
+    getFileData(att.id).then(d => {
+      if (!d) { toast('사진을 불러오지 못했어요.'); return; }
+      img.src = d;
+    });
+  }
+  function closeLightbox() {
+    el('lightbox').classList.add('hidden');
+    el('lb-img').src = '';
+    lbAtt = null;
+  }
+
   /* ── 텍스트 렌더링 (URL · 멘션) ─────────────────── */
   function renderRichText(raw) {
     let out = esc(raw);
     out = out.replace(/(https?:\/\/[^\s<]+)/g, u => '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + '</a>');
+    out = out.replace(/@(all|전체)/gi, '<span class="mention">@$1</span>');
     const sorted = state.list.slice().sort((a, b) => b.name.length - a.name.length);
     sorted.forEach(m => {
       if (!m.name) return;
@@ -330,6 +525,8 @@
     renderHeader(); renderTabs(); renderChatHead(); renderMessages(forceBottom); renderSidebar(); renderTyping();
     renderReply();
     if (state.me) el('me-chip').textContent = initials(state.me) + ' ' + state.me.name;
+    const vt = el('ver-tag');
+    if (vt) { vt.textContent = 'v' + APP_VERSION; vt.title = '앱 버전 v' + APP_VERSION; }
   }
 
   function renderHeader() {
@@ -445,10 +642,15 @@
       bubble.appendChild(q);
     }
 
-    const text = document.createElement('div');
-    text.className = 'text';
-    text.innerHTML = renderRichText(msg.text || '');
-    bubble.appendChild(text);
+    const attBlock = buildAttachmentBlock(msg);
+    if (attBlock) bubble.appendChild(attBlock);
+
+    if (String(msg.text || '').trim()) {
+      const text = document.createElement('div');
+      text.className = 'text';
+      text.innerHTML = renderRichText(msg.text || '');
+      bubble.appendChild(text);
+    }
 
     const reactions = msg.reactions || {};
     const keys = Object.keys(reactions).filter(k => reactions[k] && Object.keys(reactions[k]).length);
@@ -481,6 +683,51 @@
         wrap.classList.toggle('open');
       });
     }
+    return wrap;
+  }
+
+  function buildAttachmentBlock(msg) {
+    const atts = normFiles(msg.files);
+    if (!atts.length) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'att-wrap';
+    const imgs = atts.filter(a => a.kind === 'image');
+    const files = atts.filter(a => a.kind !== 'image');
+
+    if (imgs.length) {
+      const row = document.createElement('div');
+      row.className = 'att-imgs';
+      imgs.forEach(a => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'att-img-btn loading';
+        btn.title = (a.name || '사진') + ' — 눌러서 크게 보기';
+        const img = document.createElement('img');
+        img.alt = a.name || '사진';
+        btn.appendChild(img);
+        btn.addEventListener('click', e => { e.stopPropagation(); openLightbox(a); });
+        row.appendChild(btn);
+        getFileData(a.id).then(d => {
+          btn.classList.remove('loading');
+          if (!d) { btn.title = '사진을 불러오지 못했습니다'; return; }
+          img.src = d;
+        });
+      });
+      wrap.appendChild(row);
+    }
+
+    files.forEach(a => {
+      const card = document.createElement('div');
+      card.className = 'att-file';
+      card.innerHTML =
+        '<span class="fic">' + fileIcon(a.name) + '</span>' +
+        '<span class="f-info"><span class="f-nm">' + esc(a.name || '파일') + '</span>' +
+        '<span class="f-sz">' + esc(sizeLabel(a.size)) + '</span></span>' +
+        '<button class="f-dl" type="button">다운로드</button>';
+      card.querySelector('.f-dl').addEventListener('click', e => { e.stopPropagation(); downloadAttachment(a); });
+      wrap.appendChild(card);
+    });
+
     return wrap;
   }
 
@@ -535,7 +782,8 @@
   function send() {
     const ta = el('input');
     const text = (ta.value || '').replace(/\s+$/, '');
-    if (!text.trim() || !state.me || sending) return;
+    const atts = state.pending.slice();
+    if ((!text.trim() && !atts.length) || !state.me || sending) return;
     sending = true;
     el('send').disabled = true;
     const payload = {
@@ -544,20 +792,39 @@
       ts: TS,
       replyTo: state.reply ? { id: state.reply.id, memberId: state.reply.memberId, text: state.reply.text } : null
     };
+    if (atts.length) {
+      payload.files = atts.map(a => ({
+        id: a.id, name: a.name, size: a.size, type: a.type, kind: a.kind, w: a.w || 0, h: a.h || 0
+      }));
+    }
     const roomId = state.room;
     const finish = () => { sending = false; el('send').disabled = false; };
-    const ref = db.ref('rooms/' + roomId + '/messages').push(payload);
-    const newId = ref.key;
-    ref.then(() => {
-      ta.value = ''; autoGrow(ta);
-      state.reply = null; renderReply();
-      db.ref('typing/' + roomId + '/' + state.me.id).remove().catch(() => {});
-      scrollBottom(true);
-      finish();
-      callAiMembers(roomId, Object.assign({ id: newId }, payload));
-    }, err => {
-      console.error(err);
-      toast('전송하지 못했습니다. 연결을 확인해 주세요.');
+
+    // 1) 첨부 본문(files/<id>) 먼저 올리고 2) 메시지를 남긴다
+    const uploads = atts.map(a => db.ref('files/' + a.id).set({
+      name: a.name, type: a.type, size: a.size, kind: a.kind,
+      w: a.w || 0, h: a.h || 0, data: a.data, ts: Date.now(), by: state.me.id
+    }));
+
+    Promise.all(uploads).then(() => {
+      const ref = db.ref('rooms/' + roomId + '/messages').push(payload);
+      const newId = ref.key;
+      ref.then(() => {
+        ta.value = ''; autoGrow(ta);
+        state.pending = []; renderPending();
+        state.reply = null; renderReply();
+        db.ref('typing/' + roomId + '/' + state.me.id).remove().catch(() => {});
+        scrollBottom(true);
+        finish();
+        callAiMembers(roomId, Object.assign({ id: newId }, payload), atts);
+      }, err => {
+        console.error(err);
+        toast('전송하지 못했습니다. 연결을 확인해 주세요.');
+        finish();
+      });
+    }).catch(err => {
+      console.error('첨부 업로드 실패', err);
+      toast('사진·파일을 올리지 못했습니다. 잠시 뒤 다시 보내 주세요.');
       finish();
     });
   }
@@ -590,12 +857,68 @@
     return hits.slice(0, AI_ENGINE.maxPerMessage).map(h => h.m);
   }
 
-  function callAiMembers(roomId, trigger) {
+  /* 누가 답할지 정한다.
+     · @all / @전체   → AI 전원
+     · @이름 / 이름   → 그 AI (최대 2명)
+     · 아무도 안 부름  → 기본 비서(혀니). 답글을 단 상대가 AI면 그 AI. */
+  function planReplies(text, senderId, replyTo) {
+    const src = String(text || '');
+    const ais = state.list.filter(m => m && m.kind === 'ai' && m.id !== senderId);
+    if (ALL_RE.test(src)) {
+      return { targets: ais.slice().sort((a, b) => (a.order || 99) - (b.order || 99)), all: true };
+    }
+    const hits = findAiTargets(src, senderId);
+    if (hits.length) return { targets: hits, all: false };
+
+    if (replyTo && replyTo.memberId) {
+      const t = state.members[replyTo.memberId];
+      if (t && t.kind === 'ai' && t.id !== senderId) return { targets: [t], all: false, fallback: true };
+    }
+    const def = state.members[DEFAULT_AI] || ais[0];
+    if (def && def.kind === 'ai' && def.id !== senderId) return { targets: [def], all: false, fallback: true };
+    return { targets: [], all: false };
+  }
+
+  /* 여러 창이 켜져 있어도 한 메시지에 한 AI는 한 번만 답하도록 선점한다. */
+  function claimReply(triggerId, memberId) {
+    if (!triggerId) return Promise.resolve(true);
+    return db.ref('claims/' + triggerId + '/' + memberId)
+      .transaction(cur => (cur === null ? { ts: Date.now(), by: SESSION_ID } : undefined))
+      .then(res => !!(res && res.committed))
+      .catch(() => true);
+  }
+
+  function callAiMembers(roomId, trigger, localAtts) {
     if (!state.me || state.me.kind === 'ai') return;
     if (trigger.auto) return;
-    const targets = findAiTargets(trigger.text, state.me.id);
-    if (!targets.length) return;
-    targets.reduce((p, m) => p.then(() => aiReply(roomId, m, trigger)), Promise.resolve());
+    const plan = planReplies(trigger.text, state.me.id, trigger.replyTo);
+    if (!plan.targets.length) return;
+    const total = plan.targets.length;
+    (async () => {
+      let ok = 0;
+      for (let i = 0; i < plan.targets.length; i++) {
+        const m = plan.targets[i];
+        if (await claimReply(trigger.id, m.id)) {
+          const done = await aiReply(roomId, m, trigger, { all: plan.all, idx: i, total: total }, localAtts);
+          if (done) ok++;
+        }
+        if (i < plan.targets.length - 1) await sleep(AI_ENGINE.allGapMs);
+      }
+      if (plan.all && ok < total && state.room === roomId) {
+        toast('전원응답 ' + ok + '/' + total + '명이 답했습니다 — 못한 멤버는 다시 불러 주세요');
+      }
+    })().catch(e => console.warn('AI 순차 응답 오류', e));
+  }
+
+  function attachNote(m) {
+    const fs = normFiles(m && m.files);
+    if (!fs.length) return '';
+    const imgs = fs.filter(f => f.kind === 'image').length;
+    const others = fs.length - imgs;
+    const parts = [];
+    if (imgs) parts.push('사진 ' + imgs + '장');
+    if (others) parts.push('파일 ' + others + '개');
+    return ' [' + parts.join(', ') + ' 첨부]';
   }
 
   function aiContext(roomId, trigger) {
@@ -606,11 +929,11 @@
       .map(m => ({
         name: memberName(m.memberId),
         ai: (memberById(m.memberId) || {}).kind === 'ai',
-        text: String(m.text || '').slice(0, 700)
+        text: (String(m.text || '') + attachNote(m)).trim().slice(0, 700)
       }));
     // 방금 보낸 메시지가 아직 목록에 반영되지 않았을 수 있으니 마지막에 확실히 붙인다
-    if (trigger && trigger.text) {
-      const t = String(trigger.text).slice(0, 700);
+    if (trigger && (trigger.text || normFiles(trigger.files).length)) {
+      const t = (String(trigger.text || '') + attachNote(trigger)).trim().slice(0, 700);
       const last = list[list.length - 1];
       if (!last || last.text !== t) {
         list.push({ name: memberName(trigger.memberId), ai: false, text: t });
@@ -619,14 +942,21 @@
     return list;
   }
 
-  function askAiEngine(roomId, member, trigger) {
-    const body = {
-      memberId: member.id,
-      memberName: member.name,
-      memberRole: member.role || '',
-      room: roomId,
-      messages: aiContext(roomId, trigger)
-    };
+  function imagesForTrigger(trigger, localAtts) {
+    const metas = normFiles(trigger && trigger.files).filter(f => f.kind === 'image').slice(0, AI_ENGINE.maxImages);
+    if (!metas.length) return Promise.resolve([]);
+    const local = {};
+    (localAtts || []).forEach(a => { if (a && a.id && a.data) local[a.id] = a.data; });
+    return Promise.all(metas.map(f => {
+      const p = local[f.id] ? Promise.resolve(local[f.id]) : getFileData(f.id);
+      return p.then(d => {
+        const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(d || '');
+        return m ? { mimeType: m[1], data: m[2] } : null;
+      }).catch(() => null);
+    })).then(list => list.filter(Boolean));
+  }
+
+  function postEngine(body, attempt) {
     const ctrl = window.AbortController ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), AI_ENGINE.timeoutMs) : null;
     return fetch(AI_ENGINE.proxy, {
@@ -640,19 +970,44 @@
         throw new Error((data && (data.error || data.message)) || ('HTTP ' + res.status));
       }
       return String(data.text || '').trim();
-    })).catch(err => { if (timer) clearTimeout(timer); throw err; });
+    })).catch(err => {
+      if (timer) clearTimeout(timer);
+      const msg = String((err && err.message) || '');
+      // 무료 등급 분당 제한(429/RESOURCE_EXHAUSTED)이면 잠시 쉬었다 한 번 더
+      if (attempt < 2 && /429|resource_exhausted|quota|rate.?limit|overloaded/i.test(msg)) {
+        return sleep(2500).then(() => postEngine(body, attempt + 1));
+      }
+      throw err;
+    });
   }
 
-  function aiReply(roomId, member, trigger) {
+  function askAiEngine(roomId, member, trigger, meta, localAtts) {
+    return imagesForTrigger(trigger, localAtts).then(images => {
+      const body = {
+        memberId: member.id,
+        memberName: member.name,
+        memberRole: member.role || '',
+        room: roomId,
+        all: !!(meta && meta.all),
+        index: meta && meta.total > 1 ? meta.idx + 1 : 0,
+        total: (meta && meta.total) || 1,
+        messages: aiContext(roomId, trigger)
+      };
+      if (images.length) body.images = images;
+      return postEngine(body, 0);
+    });
+  }
+
+  function aiReply(roomId, member, trigger, meta, localAtts) {
     const key = roomId + '/' + member.id;
-    if (aiBusy[key]) return Promise.resolve();
+    if (aiBusy[key]) return Promise.resolve(false);
     aiBusy[key] = true;
     const typingRef = db.ref('typing/' + roomId + '/' + member.id);
     const beatTyping = () => typingRef.set({ name: member.name, ts: Date.now() }).catch(() => {});
     beatTyping();
     const beat = setInterval(beatTyping, 3500);
-    return askAiEngine(roomId, member, trigger).then(text => {
-      if (!text) return null;
+    return askAiEngine(roomId, member, trigger, meta, localAtts).then(text => {
+      if (!text) return false;
       return db.ref('rooms/' + roomId + '/messages').push({
         memberId: member.id,
         text: text.slice(0, 1200),
@@ -661,16 +1016,22 @@
         replyTo: {
           id: trigger.id,
           memberId: trigger.memberId,
-          text: String(trigger.text || '').slice(0, 200)
+          text: String(trigger.text || '').slice(0, 200) || (normFiles(trigger.files).length ? '📎 사진·파일' : '')
         }
-      });
+      }).then(() => true);
     }).catch(err => {
       console.warn('AI 응답 실패', member.name, err);
-      if (state.room === roomId) toast(member.name + ' 연결이 잠시 막혔어요. 조금 뒤에 다시 불러 주세요.');
-    }).then(() => {
+      // 실패한 답글은 선점을 풀어 다시 부를 수 있게 한다
+      db.ref('claims/' + trigger.id + '/' + member.id).remove().catch(() => {});
+      if (state.room === roomId && !(meta && meta.all)) {
+        toast(member.name + ' 연결이 잠시 막혔어요. 조금 뒤에 다시 불러 주세요.');
+      }
+      return false;
+    }).then(ok => {
       clearInterval(beat);
       typingRef.remove().catch(() => {});
       delete aiBusy[key];
+      return ok === true;
     });
   }
 
@@ -685,7 +1046,10 @@
   function deleteMessage(msg) {
     if (!state.me || msg.memberId !== state.me.id) return;
     if (!confirm('이 메시지를 삭제할까요?')) return;
-    db.ref('rooms/' + state.room + '/messages/' + msg.id).remove().catch(() => toast('삭제하지 못했습니다.'));
+    const roomId = state.room;
+    db.ref('rooms/' + roomId + '/messages/' + msg.id).remove().catch(() => toast('삭제하지 못했습니다.'));
+    normFiles(msg.files).forEach(a => { if (a && a.id) db.ref('files/' + a.id).remove().catch(() => {}); });
+    db.ref('claims/' + msg.id).remove().catch(() => {});
   }
 
   /* ── 렌더: 사이드바(멤버) ──────────────────────── */
@@ -722,6 +1086,8 @@
 
   /* ── 멘션 자동완성 ─────────────────────────────── */
   let mentionSel = 0, mentionItems = [];
+  const ALL_ITEM = { id: '__all', name: 'all', role: 'AI 7명 전원에게', emoji: '📣', color: '#c2603f', kind: 'all' };
+
   function updateMentionPop() {
     const ta = el('input');
     const caret = ta.selectionStart || 0;
@@ -730,7 +1096,13 @@
     const pop = el('mention-pop');
     if (!mm) { pop.classList.add('hidden'); mentionItems = []; return; }
     const q = mm[2].replace(/\s/g, '').toLowerCase();
-    mentionItems = state.list.filter(m => m.name.replace(/\s/g, '').toLowerCase().includes(q)).slice(0, 8);
+    mentionItems = [];
+    if (!q || 'all'.indexOf(q) === 0 || '전체'.indexOf(q) === 0 || '전원'.indexOf(q) === 0) {
+      mentionItems.push(ALL_ITEM);
+    }
+    mentionItems = mentionItems.concat(
+      state.list.filter(m => m.name.replace(/\s/g, '').toLowerCase().includes(q)).slice(0, 8)
+    );
     if (!mentionItems.length) { pop.classList.add('hidden'); return; }
     mentionSel = 0;
     pop.innerHTML = '';
@@ -1098,6 +1470,51 @@
     el('input').addEventListener('blur', () => setTimeout(() => el('mention-pop').classList.add('hidden'), 120));
 
     el('send').addEventListener('click', send);
+
+    // ── 사진·파일 첨부 ──
+    el('btn-attach').addEventListener('click', () => el('file-input').click());
+    el('file-input').addEventListener('change', e => {
+      addFiles(e.target.files);
+      e.target.value = '';
+    });
+    el('input').addEventListener('paste', e => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      const picked = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') { const f = items[i].getAsFile(); if (f) picked.push(f); }
+      }
+      if (picked.length) { e.preventDefault(); addFiles(picked); }
+    });
+
+    const chatEl = document.querySelector('.chat');
+    let dragDepth = 0;
+    const showDrop = v => el('drop-overlay').classList.toggle('hidden', !v);
+    const hasFiles = dt => !!(dt && Array.prototype.indexOf.call(dt.types || [], 'Files') >= 0);
+    if (chatEl) {
+      chatEl.addEventListener('dragenter', e => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault(); dragDepth++; showDrop(true);
+      });
+      chatEl.addEventListener('dragover', e => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {}
+        showDrop(true);
+      });
+      chatEl.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) showDrop(false); });
+      chatEl.addEventListener('drop', e => {
+        if (!e.dataTransfer) return;
+        e.preventDefault(); dragDepth = 0; showDrop(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+      });
+    }
+
+    el('lb-close').addEventListener('click', closeLightbox);
+    el('lb-save').addEventListener('click', () => { if (lbAtt) downloadAttachment(lbAtt); });
+    el('lightbox').addEventListener('click', e => {
+      if (e.target === el('lightbox') || e.target === el('lb-stage')) closeLightbox();
+    });
+
     el('rp-cancel').addEventListener('click', () => { state.reply = null; renderReply(); });
 
     el('messages').addEventListener('scroll', () => {
@@ -1106,6 +1523,7 @@
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
+        if (!el('lightbox').classList.contains('hidden')) { closeLightbox(); return; }
         document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
         closePeople();
       }
