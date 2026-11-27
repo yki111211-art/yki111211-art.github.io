@@ -861,12 +861,12 @@
     const params = new URLSearchParams(location.search);
     const urlM = params.get('m'), urlPin = params.get('pin');
     const stored = localStorage.getItem(LS_ID);
-    if (stored && state.members[stored]) { enterApp(stored); return; }
     if (urlM && state.members[urlM] && urlPin != null && String(state.members[urlM].pin) === String(urlPin)) {
       localStorage.setItem(LS_ID, urlM);
       enterApp(urlM);
       return;
     }
+    if (stored && state.members[stored]) { enterApp(stored); return; }
     showLogin(urlM && state.members[urlM] ? urlM : null);
   }
 
