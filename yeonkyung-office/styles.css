@@ -397,6 +397,9 @@ input,textarea{font-family:inherit}
     padding-top:max(10px,env(safe-area-inset-top));
   }
   .sidebar.open{transform:none}
+  .sidebar-head{flex-wrap:wrap;gap:8px}
+  .sidebar-head-actions{width:100%;justify-content:space-between;gap:8px}
+  #btn-manage{flex:1;justify-content:center}
   .scrim.show{display:block;position:fixed;inset:0;background:rgba(42,32,22,.32);z-index:45}
   .modal{padding:12px;align-items:flex-end}
   .modal-card{max-height:92dvh;border-radius:22px}
