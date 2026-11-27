@@ -119,6 +119,14 @@
   function memberColor(id) { const m = memberById(id); return (m && m.color) || '#8d8377'; }
   function memberName(id) { const m = memberById(id); return m ? m.name : '알 수 없음'; }
 
+  function isOnline(id) {
+    const p = state.presence[id];
+    if (!p) return false;
+    const s = p.sessions || {};
+    const now = Date.now();
+    return Object.keys(s).some(k => s[k] && (!s[k].ts || now - s[k].ts < 180000));
+  }
+
   function toast(msg) {
     const t = el('toast'); t.textContent = msg; t.classList.add('show');
     clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2200);
@@ -241,7 +249,7 @@
   function logout() {
     const m = state.me;
     if (m) {
-      db.ref('presence/' + m.id).update({ online: false, lastSeen: Date.now() }).catch(() => {});
+      db.ref('presence/' + m.id + '/sessions/' + SESSION_ID).remove().catch(() => {});
       db.ref('typing/' + state.room + '/' + m.id).remove().catch(() => {});
     }
     localStorage.removeItem(LS_ID);
@@ -252,16 +260,22 @@
 
   /* ── Presence ─────────────────────────────────── */
   let presenceTimer = null;
+  const SESSION_ID = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
   function startPresence() {
     const m = state.me; if (!m) return;
-    const r = db.ref('presence/' + m.id);
-    r.onDisconnect().set({ online: false, lastSeen: TS });
-    const beat = () => r.update({ online: true, lastSeen: TS, name: m.name }).catch(() => {});
+    const root = db.ref('presence/' + m.id);
+    const sess = root.child('sessions/' + SESSION_ID);
+    sess.onDisconnect().remove();
+    const beat = () => {
+      sess.set({ ts: Date.now(), name: m.name }).catch(() => {});
+      root.update({ lastSeen: Date.now() }).catch(() => {});
+    };
     beat();
     clearInterval(presenceTimer);
     presenceTimer = setInterval(beat, 45000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) beat(); });
-    window.addEventListener('pagehide', () => { try { r.set({ online: false, lastSeen: Date.now() }); } catch (e) {} });
+    window.addEventListener('pagehide', () => { try { sess.remove(); } catch (e) {} });
   }
 
   /* ── 입력 중 표시 ──────────────────────────────── */
@@ -309,7 +323,7 @@
 
   function renderHeader() {
     el('brand-sub').textContent = state.list.length + '인 오피스 · 실시간 협업 데스크';
-    const on = Object.keys(state.presence).filter(k => state.presence[k] && state.presence[k].online).length;
+    const on = state.list.filter(m => isOnline(m.id)).length;
     const pill = el('status-pill');
     if (!state.connected) {
       pill.className = 'status-pill off';
@@ -556,10 +570,11 @@
     list.innerHTML = '';
     state.list.forEach(m => {
       const p = state.presence[m.id] || {};
+      const online = isOnline(m.id);
       const row = document.createElement('div');
-      row.className = 'member-row' + (p.online ? ' online' : '');
+      row.className = 'member-row' + (online ? ' online' : '');
       const meTag = state.me && state.me.id === m.id ? '<span class="me-tag">나</span>' : '';
-      const statusText = p.online ? '온라인' : fmtLastSeen(p.lastSeen);
+      const statusText = online ? '온라인' : fmtLastSeen(p.lastSeen);
       row.innerHTML =
         '<span class="avatar" style="--c:' + esc(m.color || '#8d8377') + '">' + esc(initials(m)) + '</span>' +
         '<span class="info"><span class="nm">' + esc(m.name) + meTag + '</span>' +

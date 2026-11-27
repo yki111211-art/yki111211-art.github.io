@@ -38,7 +38,7 @@ body::before{
 button{font-family:inherit; cursor:pointer}
 input,textarea{font-family:inherit}
 .hidden{display:none !important}
-.only-mobile{display:none}
+.only-mobile{display:none !important}
 ::selection{background:rgba(194,96,63,.18)}
 
 /* ── 공통 버튼 ── */
@@ -72,7 +72,7 @@ input,textarea{font-family:inherit}
   box-shadow:0 6px 18px rgba(160,74,44,.28), inset 0 1px 0 rgba(255,255,255,.25);
   flex:none;
 }
-.brand-mark.small{width:34px;height:34px;border-radius:11px;font-size:15px;box-shadow:0 3px 10px rgba(160,74,44,.22), inset 0 1px 0 rgba(255,255,255,.2)}
+.brand-mark.small{width:34px;height:34px;border-radius:11px;font-size:17px;box-shadow:0 3px 10px rgba(160,74,44,.22), inset 0 1px 0 rgba(255,255,255,.2)}
 .avatar{
   width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:18px;
   background:color-mix(in srgb, var(--c,#c2603f) 14%, #fff);
@@ -367,7 +367,7 @@ input,textarea{font-family:inherit}
   .msg-body{max-width:78%}
 }
 @media (max-width:860px){
-  .only-mobile{display:inline-flex}
+  .only-mobile{display:inline-flex !important}
   .brand-sub{display:none}
   .topbar{padding:10px 12px;gap:8px}
   .topbar-right .btn .lbl{display:none}
