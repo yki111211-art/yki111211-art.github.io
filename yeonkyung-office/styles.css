@@ -259,6 +259,9 @@ input,textarea{font-family:inherit}
   border-radius:16px;padding:12px 15px;font-size:14px;line-height:1.5;background:#fff;color:var(--ink);
   outline:none;transition:.15s;box-shadow:var(--shadow-sm);
 }
+#input{overflow-y:auto;scrollbar-width:thin}
+#input::-webkit-scrollbar{width:6px}
+#input::-webkit-scrollbar-thumb{background:#e6dbc9;border-radius:3px}
 #input:focus{border-color:#d9b9a9;box-shadow:0 0 0 4px rgba(194,96,63,.09)}
 #input::placeholder{color:#b3a99b}
 .send-btn{
