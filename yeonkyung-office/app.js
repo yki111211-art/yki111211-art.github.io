@@ -581,7 +581,9 @@
       const name = String(m.name || '').trim();
       if (!name) return;
       if (src.indexOf('@' + name) !== -1) { hits.push({ m: m, rank: 0 }); return; }
-      const re = new RegExp('(^|[^가-힣A-Za-z0-9_])' + escRe(name) + '($|[^가-힣A-Za-z0-9_])');
+      // 이름만 있어도 부르는 것으로 본다 (조사·호격이 붙어도 인식: 혀니야 / 제미나이한테 / 클로드는 …)
+      const re = new RegExp('(^|[^가-힣A-Za-z0-9_])' + escRe(name) +
+        '($|[^가-힣A-Za-z0-9_]|야|아|님|한테|에게|한테서|께|이랑|랑|와|과|은|는|이|가|을|를|도|만|부터|까지)');
       if (re.test(src)) hits.push({ m: m, rank: 1 });
     });
     hits.sort((a, b) => a.rank - b.rank || (a.m.order || 99) - (b.m.order || 99));
