@@ -463,8 +463,10 @@
     wrap.appendChild(av);
     wrap.appendChild(body);
 
-    if (window.matchMedia('(hover: none)').matches) {
-      bubble.addEventListener('click', () => {
+    if (isTouchy()) {
+      bubble.addEventListener('click', e => {
+        if (e.target.closest('a, .quote, .react')) return;
+        e.stopPropagation();
         document.querySelectorAll('.msg.open').forEach(x => { if (x !== wrap) x.classList.remove('open'); });
         wrap.classList.toggle('open');
       });
@@ -895,11 +897,20 @@
     });
   }
 
+  /* ── 화면 크기 · 입력 힌트 ─────────────────────── */
+  function isTouchy() {
+    return window.matchMedia('(hover: none)').matches || window.innerWidth < 860;
+  }
+  function syncPlaceholder() {
+    el('input').placeholder = isTouchy()
+      ? '메시지를 입력하세요'
+      : '메시지를 입력하세요  ·  Enter 전송 / Shift+Enter 줄바꿈';
+  }
+
   /* ── 이벤트 연결 ───────────────────────────────── */
   function bind() {
-    if (window.matchMedia('(hover: none)').matches) {
-      el('input').placeholder = '메시지를 입력하세요';
-    }
+    syncPlaceholder();
+    window.addEventListener('resize', syncPlaceholder);
     el('pin-back').addEventListener('click', () => { state.pendingId = null; showStep('pick'); });
     el('pin-submit').addEventListener('click', tryPin);
     el('pin-input').addEventListener('input', e => {

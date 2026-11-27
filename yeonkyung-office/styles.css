@@ -405,10 +405,14 @@ input,textarea{font-family:inherit}
   .member-pick{padding:9px 10px;gap:9px}
   .member-pick .nm{font-size:12.5px}
   .member-pick .rl{font-size:10.5px}
-  .msg-actions{opacity:1;pointer-events:auto;position:static;box-shadow:none;border:0;background:transparent;padding:0;margin-top:2px;justify-content:flex-start}
-  .msg.me .msg-actions{justify-content:flex-end}
+  .msg-actions{
+    position:absolute;top:-12px;right:6px;opacity:0;pointer-events:none;
+    background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px;box-shadow:var(--shadow-md);
+  }
+  .msg.me .msg-actions{right:auto;left:6px}
+  .msg.open .msg-actions{opacity:1;pointer-events:auto}
   .msg-actions .sep,.msg-actions .del{display:none}
-  .msg-actions button{background:rgba(255,255,255,.9);border:1px solid var(--line);width:30px;height:26px}
+  .msg-actions button{background:transparent;border:0;width:30px;height:26px;font-size:13px}
 }
 @media (max-width:420px){
   .invite-row .btn.tiny{padding:6px 8px;font-size:11px}
