@@ -285,7 +285,7 @@
   function signalTyping() {
     const m = state.me; if (!m) return;
     const now = Date.now();
-    if (now - lastTypingWrite > 1500) {
+    if (now - lastTypingWrite > 1200) {
       lastTypingWrite = now;
       const r = db.ref('typing/' + state.room + '/' + m.id);
       r.set({ name: m.name, ts: Date.now() }).catch(() => {});
@@ -592,7 +592,7 @@
     const now = Date.now();
     const names = Object.keys(t)
       .filter(id => !state.me || id !== state.me.id)
-      .filter(id => t[id] && t[id].ts && now - t[id].ts < 8000)
+      .filter(id => t[id] && t[id].ts && now - t[id].ts < 12000)
       .map(id => (t[id].name || memberName(id)));
     box.textContent = names.length ? (names.slice(0, 3).join(', ') + '님이 입력 중…') : '';
   }
@@ -897,6 +897,9 @@
 
   /* ── 이벤트 연결 ───────────────────────────────── */
   function bind() {
+    if (window.matchMedia('(hover: none)').matches) {
+      el('input').placeholder = '메시지를 입력하세요';
+    }
     el('pin-back').addEventListener('click', () => { state.pendingId = null; showStep('pick'); });
     el('pin-submit').addEventListener('click', tryPin);
     el('pin-input').addEventListener('input', e => {
