@@ -32,7 +32,7 @@
     maxImages: 2          // 한 번에 AI에게 보여 줄 사진 장수
   };
 
-  const APP_VERSION = '19';
+  const APP_VERSION = '20';
   const DEFAULT_AI = 'hyuni';            // 멘션이 없을 때 먼저 답하는 기본 비서
   const ALL_RE = /@\s?(all|전체|모두|전원)/i;
 
@@ -105,7 +105,10 @@
     seen: {}, booted: false, connected: true,
     pending: [],            // 보내기 전에 붙여 둔 첨부
     fileCache: {},          // 첨부 id → data URL
-    fileLoading: {}
+    fileLoading: {},
+    section: 'chat',        // chat | tasks | status | memos
+    tasks: {}, memos: {},
+    editingTask: null, editingMemo: null
   };
   window.__yk = state;
 
@@ -446,6 +449,7 @@
     state.reply = null;
     screen = 'app'; hideAll(); el('app').classList.remove('hidden');
     renderAll(true);
+    setSection('chat');
     goRoom(state.room, true);
     startPresence();
     setTimeout(() => { el('input').focus(); }, 150);
@@ -524,6 +528,7 @@
   function renderAll(forceBottom) {
     renderHeader(); renderTabs(); renderChatHead(); renderMessages(forceBottom); renderSidebar(); renderTyping();
     renderReply();
+    renderQuickMentions();
     if (state.me) el('me-chip').textContent = initials(state.me) + ' ' + state.me.name;
     const vt = el('ver-tag');
     if (vt) { vt.textContent = 'v' + APP_VERSION; vt.title = '앱 버전 v' + APP_VERSION; }
@@ -1139,6 +1144,297 @@
     ta.style.height = Math.min(ta.scrollHeight, 170) + 'px';
   }
 
+  /* ── 메인 섹션: 회의실 · 작업실 · 비서현황 · 메모 ── */
+  const SEC_IDS = ['chat', 'tasks', 'status', 'memos'];
+
+  function setSection(id) {
+    if (SEC_IDS.indexOf(id) < 0) id = 'chat';
+    state.section = id;
+    Array.prototype.forEach.call(document.querySelectorAll('.sec'), b => {
+      b.classList.toggle('active', b.getAttribute('data-sec') === id);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#app > .sec-panel'), p => {
+      p.classList.toggle('hidden', p.id !== 'sec-' + id);
+    });
+    if (id === 'chat') { closePeople(); }
+    if (id === 'tasks') renderTasks();
+    if (id === 'status') renderStatus();
+    if (id === 'memos') renderMemos();
+  }
+
+  /* ── 원터치 @멘션 칩 ── */
+  function renderQuickMentions() {
+    const wrap = el('quick-mentions');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const mk = (label, val, cls, title) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'qm' + (cls ? ' ' + cls : '');
+      b.textContent = label;
+      if (title) b.title = title;
+      b.addEventListener('click', () => insertAtCursor(val));
+      wrap.appendChild(b);
+    };
+    mk('@all', '@all', 'all', 'AI 7명가 전원에게');
+    state.list.forEach(m => {
+      if (!m || !m.name) return;
+      if (state.me && state.me.id === m.id) return;
+      mk('@' + m.name, '@' + m.name, '', m.role || '');
+    });
+  }
+
+  function insertAtCursor(str) {
+    const ta = el('input');
+    if (!ta) return;
+    const s = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+    const e = ta.selectionEnd == null ? ta.value.length : ta.selectionEnd;
+    const v = ta.value;
+    const before = v.slice(0, s), after = v.slice(e);
+    const pad = before && !/\s$/.test(before) ? ' ' : '';
+    const ins = pad + str + ' ';
+    ta.value = before + ins + after;
+    const pos = (before + ins).length;
+    ta.focus();
+    try { ta.setSelectionRange(pos, pos); } catch (err) {}
+    autoGrow(ta);
+    signalTyping();
+    el('mention-pop').classList.add('hidden');
+  }
+
+  /* ── 작업실 (tasks/) ── */
+  const TASK_STATUS = [
+    { id: 'todo', label: '할 일' },
+    { id: 'doing', label: '진행중' },
+    { id: 'done', label: '완료' }
+  ];
+
+  function taskItems() {
+    return Object.keys(state.tasks || {}).map(id => Object.assign({ id: id }, state.tasks[id]))
+      .filter(t => t && String(t.title || '').trim())
+      .sort((a, b) => (a.doneAt || a.ts || 0) - (b.doneAt || b.ts || 0));
+  }
+
+  function renderTaskOwners() {
+    const sel = el('task-owner');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">담당 (선택)</option>';
+    state.list.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.id;
+      o.textContent = initials(m) + ' ' + m.name;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
+  }
+
+  function renderTasks() {
+    if (!el('list-todo')) return;
+    const list = taskItems();
+    TASK_STATUS.forEach(s => {
+      const box = el('list-' + s.id);
+      const cnt = el('cnt-' + s.id);
+      if (!box) return;
+      box.innerHTML = '';
+      const items = list.filter(t => (t.status || 'todo') === s.id);
+      if (cnt) cnt.textContent = items.length;
+      if (!items.length) {
+        const e = document.createElement('div');
+        e.className = 'tempty';
+        e.textContent = '아직 없습니다';
+        box.appendChild(e);
+        return;
+      }
+      items.forEach(t => box.appendChild(buildTaskCard(t)));
+    });
+  }
+
+  function buildTaskCard(t) {
+    const card = document.createElement('div');
+    card.className = 'tcard';
+    const owner = t.owner ? state.members[t.owner] : null;
+    const mine = state.me && (t.by === state.me.id || t.owner === state.me.id);
+    const canEdit = mine || (state.me && state.me.kind === 'human');
+    const ownerTxt = owner ? initials(owner) + ' ' + owner.name : '';
+    card.innerHTML =
+      '<div class="t-top"><span class="t-title">' + esc(t.title) + '</span></div>' +
+      '<div class="t-meta">' +
+        (ownerTxt ? '<span class="tbadge">' + esc(ownerTxt) + '</span>' : '') +
+        (t.due ? '<span class="tbadge due">📅 ' + esc(t.due) + '</span>' : '') +
+        '<span>' + esc(fmtTime(t.ts)) + '</span>' +
+      '</div>';
+    const acts = document.createElement('div');
+    acts.className = 't-acts';
+    const mkBtn = (label, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn'; b.textContent = label;
+      b.addEventListener('click', fn);
+      acts.appendChild(b);
+    };
+    const st = t.status || 'todo';
+    if (st !== 'doing') mkBtn('▶ 진행', () => setTaskStatus(t, 'doing'));
+    if (st !== 'done') mkBtn('✓ 완료', () => setTaskStatus(t, 'done'));
+    if (st !== 'todo') mkBtn('↩ 되돌리기', () => setTaskStatus(t, 'todo'));
+    if (canEdit) mkBtn('🗑', () => deleteTask(t));
+    card.appendChild(acts);
+    return card;
+  }
+
+  function setTaskStatus(t, status) {
+    if (!state.me) return;
+    const patch = { status: status, updated: Date.now(), updatedBy: state.me.id, doneAt: status === 'done' ? Date.now() : null };
+    db.ref('tasks/' + t.id).update(patch).catch(() => toast('작업을 바꾸지 못했습니다'));
+  }
+
+  function addTask() {
+    const title = (el('task-title').value || '').trim();
+    if (!title) return toast('할 일을 적어 주세요');
+    if (!state.me) return;
+    const id = 't' + Date.now().toString(36);
+    db.ref('tasks/' + id).set({
+      title: title.slice(0, 140),
+      status: 'todo',
+      owner: el('task-owner').value || '',
+      due: (el('task-due').value || '').trim(),
+      by: state.me.id, ts: Date.now(), updated: Date.now()
+    }).then(() => {
+      el('task-title').value = ''; el('task-due').value = ''; el('task-owner').value = '';
+      el('task-add').classList.add('hidden');
+      toast('작업을 올렸습니다');
+    }).catch(() => toast('작업을 올리지 못했습니다'));
+  }
+
+  function deleteTask(t) {
+    if (!confirm('이 작업을 지울까요?\n' + t.title)) return;
+    db.ref('tasks/' + t.id).remove().catch(() => toast('지우지 못했습니다'));
+  }
+
+  /* ── 비서현황 ── */
+  const AI_TRAITS = {
+    hyuni: '대표님을 가장 가까이서 챙기는 기본 비서. 감정을 먼저 알아주고 다음 행동을 짚어 줍니다.',
+    chatgpt: '기획·아이디어 담당. 막힌 지점에 바로 쓸 안 2~3개를 제안합니다.',
+    gemini: '리서치·자료 담당. 수치와 근거를 붙여 차분하게 정리합니다.',
+    claude: '분석·문서 담당. 위험한 부분과 빠진 부분을 먼저 짚습니다.',
+    metaai: '이미지·시안 담당. 색·구도·글자 배치를 구체적으로 제안합니다.',
+    dola: '일정·할일 담당. 날짜와 순서를 정리하고 준비물을 챙깁니다.',
+    runyoung: '스페셜 멤버. 다른 멤버가 놓친 각도를 가볍게 짚습니다.'
+  };
+
+  function renderStatus() {
+    const grid = el('status-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    state.list.forEach(m => {
+      const online = isOnline(m.id);
+      const isHuman = m.kind !== 'ai';
+      const card = document.createElement('div');
+      card.className = 'scard' + (online ? ' online' : '');
+      const desc = isHuman
+        ? '대표님 · 모든 방과 결재를 총괄합니다.'
+        : (AI_TRAITS[m.id] || '방에서 이름을 부르면 자기 역할로 답합니다.');
+      const last = state.presence[m.id] ? fmtLastSeen(state.presence[m.id].lastSeen) : '오프라인';
+      card.innerHTML =
+        '<span class="avatar" style="--c:' + esc(m.color || '#8d8377') + '">' + esc(initials(m)) + '</span>' +
+        '<div class="sinfo">' +
+          '<div class="sname">' + esc(m.name) +
+            '<span class="skind' + (isHuman ? ' human' : '') + '">' + (isHuman ? '대표' : 'AI') + '</span>' +
+            (state.me && state.me.id === m.id ? '<span class="skind human">나</span>' : '') +
+          '</div>' +
+          '<div class="srole">' + esc(m.role || '') + ' · ' + (isHuman ? '사람' : 'Gemini 공유 엔진') + '</div>' +
+          '<div class="sdesc">' + esc(desc) + '</div>' +
+          '<div class="sstate"><span class="d"></span>' + (online ? '온라인 · 언제든 호출 가능' : last) + '</div>' +
+        '</div>';
+      grid.appendChild(card);
+    });
+  }
+
+  /* ── 메모 (memos/) ── */
+  function memoItems() {
+    return Object.keys(state.memos || {}).map(id => Object.assign({ id: id }, state.memos[id]))
+      .filter(m => m && String(m.text || '').trim())
+      .sort((a, b) => (b.updated || b.ts || 0) - (a.updated || a.ts || 0));
+  }
+
+  function renderMemos() {
+    const box = el('memo-list');
+    if (!box) return;
+    box.innerHTML = '';
+    const list = memoItems();
+    if (!list.length) {
+      const e = document.createElement('div');
+      e.className = 'tempty';
+      e.textContent = '아직 메모가 없습니다. ＋ 새 메모로 시작해 보세요.';
+      box.appendChild(e);
+      return;
+    }
+    list.forEach(m => {
+      const mine = state.me && m.by === state.me.id;
+      const canEdit = mine || (state.me && state.me.kind === 'human');
+      const card = document.createElement('div');
+      card.className = 'memo-card';
+      const who = state.members[m.by];
+      card.innerHTML =
+        '<div class="m-text">' + esc(m.text) + '</div>' +
+        '<div class="m-foot"><span>' + esc(who ? initials(who) + ' ' + who.name : '알 수 없음') +
+          ' · ' + esc(fmtTime(m.updated || m.ts)) + '</span></div>';
+      if (canEdit) {
+        const acts = document.createElement('div');
+        acts.className = 'm-acts';
+        const b1 = document.createElement('button');
+        b1.type = 'button'; b1.className = 'btn'; b1.textContent = '수정';
+        b1.addEventListener('click', () => startMemoEdit(m));
+        const b2 = document.createElement('button');
+        b2.type = 'button'; b2.className = 'btn'; b2.textContent = '🗑';
+        b2.addEventListener('click', () => deleteMemo(m));
+        acts.appendChild(b1); acts.appendChild(b2);
+        card.querySelector('.m-foot').appendChild(acts);
+      }
+      box.appendChild(card);
+    });
+  }
+
+  function openMemo() {
+    state.editingMemo = null;
+    el('memo-text').value = '';
+    el('memo-add').classList.remove('hidden');
+    el('memo-text').focus();
+  }
+
+  function startMemoEdit(m) {
+    state.editingMemo = m.id;
+    el('memo-text').value = m.text || '';
+    el('memo-add').classList.remove('hidden');
+    el('memo-text').focus();
+  }
+
+  function saveMemo() {
+    const text = (el('memo-text').value || '').replace(/\s+$/, '');
+    if (!text.trim()) return toast('메모 내용을 적어 주세요');
+    if (!state.me) return;
+    if (state.editingMemo) {
+      db.ref('memos/' + state.editingMemo).update({ text: text.slice(0, 4000), updated: Date.now(), updatedBy: state.me.id })
+        .then(() => { closeMemoEditor(); toast('메모를 고쳤습니다'); })
+        .catch(() => toast('저장하지 못했습니다'));
+    } else {
+      const id = 'm' + Date.now().toString(36);
+      db.ref('memos/' + id).set({ text: text.slice(0, 4000), by: state.me.id, ts: Date.now(), updated: Date.now() })
+        .then(() => { closeMemoEditor(); toast('메모를 남겼습니다'); })
+        .catch(() => toast('저장하지 못했습니다'));
+    }
+  }
+
+  function closeMemoEditor() {
+    state.editingMemo = null;
+    el('memo-text').value = '';
+    el('memo-add').classList.add('hidden');
+  }
+
+  function deleteMemo(m) {
+    if (!confirm('이 메모를 지울까요?')) return;
+    db.ref('memos/' + m.id).remove().catch(() => toast('지우지 못했습니다'));
+  }
+
   /* ── 모달: 접속 안내 ───────────────────────────── */
   function baseUrl() { return location.origin + location.pathname; }
   function linkFor(m) { return baseUrl() + '?m=' + encodeURIComponent(m.id) + '&pin=' + encodeURIComponent(m.pin || ''); }
@@ -1319,6 +1615,9 @@
         state.me = fresh;
         renderAll();
         renderMemberEditorIfOpen();
+        if (state.section === 'tasks') { renderTaskOwners(); renderTasks(); }
+        if (state.section === 'status') renderStatus();
+        if (state.section === 'memos') renderMemos();
         return;
       }
       if (!state.booted) { resolveInitialScreen(); return; }
@@ -1337,6 +1636,16 @@
     });
 
     db.ref('typing').on('value', snap => { state.typing = snap.val() || {}; renderTyping(); });
+
+    db.ref('tasks').on('value', snap => {
+      state.tasks = snap.val() || {};
+      if (state.section === 'tasks') renderTasks();
+    });
+
+    db.ref('memos').on('value', snap => {
+      state.memos = snap.val() || {};
+      if (state.section === 'memos') renderMemos();
+    });
 
     db.ref('rooms').on('value', snap => {
       state.rooms = snap.val() || {};
@@ -1423,6 +1732,23 @@
 
     el('btn-copy-all').addEventListener('click', copyAllInvites);
     el('btn-add-member').addEventListener('click', addMember);
+
+    // ── 메인 섹션 · 작업실 · 메모 ──
+    Array.prototype.forEach.call(document.querySelectorAll('.sec'), b => {
+      b.addEventListener('click', () => setSection(b.getAttribute('data-sec')));
+    });
+    el('btn-task-open').addEventListener('click', () => {
+      const box = el('task-add');
+      box.classList.toggle('hidden');
+      if (!box.classList.contains('hidden')) { renderTaskOwners(); el('task-title').focus(); }
+    });
+    el('btn-task-save').addEventListener('click', addTask);
+    el('btn-task-cancel').addEventListener('click', () => el('task-add').classList.add('hidden'));
+    el('task-title').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } });
+    el('btn-manage2').addEventListener('click', openMembers);
+    el('btn-memo-open').addEventListener('click', openMemo);
+    el('btn-memo-save').addEventListener('click', saveMemo);
+    el('btn-memo-cancel').addEventListener('click', closeMemoEditor);
 
     const aiHint = el('ai-hint');
     if (localStorage.getItem('yk_ai_hint') === 'off') aiHint.classList.add('hidden');

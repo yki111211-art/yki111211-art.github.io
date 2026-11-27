@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="연경 오피스">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="styles.css?v=19">
+<link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
 
@@ -85,6 +85,14 @@
     </div>
   </header>
 
+  <nav class="sections" id="sections">
+    <button class="sec active" type="button" data-sec="chat"><span class="sec-ic">💬</span><span class="sec-lb">회의실</span></button>
+    <button class="sec" type="button" data-sec="tasks"><span class="sec-ic">📋</span><span class="sec-lb">작업실</span></button>
+    <button class="sec" type="button" data-sec="status"><span class="sec-ic">📊</span><span class="sec-lb">비서현황</span></button>
+    <button class="sec" type="button" data-sec="memos"><span class="sec-ic">📝</span><span class="sec-lb">메모</span></button>
+  </nav>
+
+  <section class="sec-panel" id="sec-chat">
   <nav class="tabs" id="tabs"></nav>
 
   <main class="workspace">
@@ -110,6 +118,7 @@
         </div>
 
         <div class="attach-strip hidden" id="attach-strip"></div>
+        <div class="quick-mentions" id="quick-mentions"></div>
 
         <div class="reply-preview hidden" id="reply-preview">
           <div class="rp-inner">
@@ -149,12 +158,80 @@
       <div class="member-list" id="member-list"></div>
       <div class="sidebar-foot">
         <span class="live-dot"></span> 실시간 연결됨 · Firebase
-        <span class="ver" id="ver-tag">v19</span>
+        <span class="ver" id="ver-tag">v20</span>
       </div>
     </aside>
 
     <div class="scrim" id="scrim"></div>
   </main>
+  </section>
+
+  <!-- ─────────── 작업실 ─────────── -->
+  <section class="sec-panel hidden" id="sec-tasks">
+    <div class="pane">
+      <div class="pane-head">
+        <div class="pane-title">
+          <h2>📋 작업실</h2>
+          <p>할 일을 카드로 올리고, 진행중 · 완료로 옮겨 주세요.</p>
+        </div>
+        <button class="btn primary" id="btn-task-open">＋ 새 작업</button>
+      </div>
+      <div class="task-add hidden" id="task-add">
+        <input class="inp" id="task-title" maxlength="140" placeholder="할 일 (예: 11/28 호치민 1군 카페 원고 발행)">
+        <div class="task-add-row">
+          <select class="inp" id="task-owner"></select>
+          <input class="inp" id="task-due" type="date">
+          <button class="btn primary" id="btn-task-save">추가</button>
+          <button class="btn" id="btn-task-cancel">취소</button>
+        </div>
+      </div>
+      <div class="task-board" id="task-board">
+        <div class="tcol"><h3>할 일 <b id="cnt-todo">0</b></h3><div class="tlist" id="list-todo"></div></div>
+        <div class="tcol"><h3>진행중 <b id="cnt-doing">0</b></h3><div class="tlist" id="list-doing"></div></div>
+        <div class="tcol"><h3>완료 <b id="cnt-done">0</b></h3><div class="tlist" id="list-done"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 비서현황 ─────────── -->
+  <section class="sec-panel hidden" id="sec-status">
+    <div class="pane">
+      <div class="pane-head">
+        <div class="pane-title">
+          <h2>📊 비서현황</h2>
+          <p>8명 멤버의 역할 · 접속 상태 · 응답 엔진을 한눈에 봅니다.</p>
+        </div>
+        <button class="btn" id="btn-manage2">＋ 멤버 추가·수정</button>
+      </div>
+      <div class="status-grid" id="status-grid"></div>
+      <div class="engine-card">
+        <b>응답 엔진</b>
+        <p>AI 멤버 7명이 무료 Gemini(gemini-3.5-flash-lite) 엔진 하나를 함께 쓰고, 이름 · 역할 · 말투만 각자 다릅니다. 답글은 Cloudflare Worker를 거쳐 가고 Gemini 키는 서버에만 있습니다.</p>
+        <p class="small">@all 이면 7명이 0.6초 간격으로 차례로 답하고, 멘션이 없으면 혀니가 먼저 답합니다. 사진을 올리고 부르면 AI가 사진을 보고 답합니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 메모 ─────────── -->
+  <section class="sec-panel hidden" id="sec-memos">
+    <div class="pane">
+      <div class="pane-head">
+        <div class="pane-title">
+          <h2>📝 메모</h2>
+          <p>대표님과 비서실이 함께 보고 고치는 공유 메모입니다.</p>
+        </div>
+        <button class="btn primary" id="btn-memo-open">＋ 새 메모</button>
+      </div>
+      <div class="memo-add hidden" id="memo-add">
+        <textarea class="inp memo-ta" id="memo-text" rows="3" maxlength="4000" placeholder="메모 내용을 적어 주세요"></textarea>
+        <div class="memo-add-row">
+          <button class="btn" id="btn-memo-cancel">취소</button>
+          <button class="btn primary" id="btn-memo-save">저장</button>
+        </div>
+      </div>
+      <div class="memo-list" id="memo-list"></div>
+    </div>
+  </section>
 </div>
 
 <!-- ─────────── 모달: 멤버별 접속 안내 ─────────── -->
@@ -228,6 +305,6 @@
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-auth-compat.js"></script>
 <script src="vendor/firebase-database-compat.js"></script>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>
