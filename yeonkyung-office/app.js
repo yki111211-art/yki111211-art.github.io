@@ -81,6 +81,7 @@
     me: null, room: 'council', reply: null, pendingId: null,
     seen: {}, booted: false, connected: true
   };
+  window.__yk = state;
 
   /* ── 유틸 ─────────────────────────────────────── */
   const el = id => document.getElementById(id);
@@ -264,11 +265,12 @@
 
   function startPresence() {
     const m = state.me; if (!m) return;
+    trace.push('presence start ' + m.id);
     const root = db.ref('presence/' + m.id);
     const sess = root.child('sessions/' + SESSION_ID);
     sess.onDisconnect().remove();
     const beat = () => {
-      sess.set({ ts: Date.now(), name: m.name }).catch(() => {});
+      sess.set({ ts: Date.now(), name: m.name }).catch(e => trace.push('presence fail ' + e.code));
       root.update({ lastSeen: Date.now() }).catch(() => {});
     };
     beat();
