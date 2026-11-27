@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="연경 오피스">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="styles.css?v=18">
+<link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
 
@@ -101,12 +101,15 @@
       </div>
 
       <div class="messages" id="messages"></div>
+      <div class="drop-overlay hidden" id="drop-overlay"><div class="drop-inner">📎 여기에 놓으면 사진·파일이 첨부됩니다</div></div>
 
       <div class="composer">
         <div class="ai-hint" id="ai-hint">
-          <span>✨ <b>@제미나이</b> · <b>@클로드</b> 처럼 부르면 그 AI가 바로 답해요 · 무료 Gemini 엔진 공유</span>
+          <span>✨ <b>@제미나이</b> 부르면 그 AI가 답해요 · <b>@all</b> 이면 7명 전원 · 그냥 쓰면 <b>혀니</b>가 답해요 · 📎 사진·파일</span>
           <button class="icon-btn" id="ai-hint-close" aria-label="안내 닫기">✕</button>
         </div>
+
+        <div class="attach-strip hidden" id="attach-strip"></div>
 
         <div class="reply-preview hidden" id="reply-preview">
           <div class="rp-inner">
@@ -121,6 +124,8 @@
 
         <div class="composer-row">
           <div class="mention-pop hidden" id="mention-pop"></div>
+          <button class="attach-btn" id="btn-attach" type="button" aria-label="사진·파일 첨부" title="사진·파일 첨부">📎</button>
+          <input type="file" id="file-input" class="hidden" multiple accept="image/*,application/pdf,text/plain,.txt,.doc,.docx,.xls,.xlsx,.csv,.zip,.hwp,.hwpx,.ppt,.pptx">
           <textarea id="input" rows="1" placeholder="메시지를 입력하세요  ·  Enter 전송 / Shift+Enter 줄바꿈"></textarea>
           <button class="send-btn" id="send" aria-label="전송">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l.1 6.5L15 12 3.5 13.9z" fill="currentColor"/></svg>
@@ -144,6 +149,7 @@
       <div class="member-list" id="member-list"></div>
       <div class="sidebar-foot">
         <span class="live-dot"></span> 실시간 연결됨 · Firebase
+        <span class="ver" id="ver-tag">v19</span>
       </div>
     </aside>
 
@@ -171,6 +177,7 @@
         <b>AI 멤버 안내 · 자동응답 켜짐</b>
         <p>혀니 · 제미나이 · ChatGPT · 클로드 · Meta AI · Dola · Runyoung 은 <b>이미 자동으로 답합니다.</b> 채팅창에서 <b>@제미나이</b> 처럼 부르면 그 멤버의 역할·말투로 답글이 달립니다.</p>
         <p>지금은 모든 AI 멤버가 <b>무료 Gemini 엔진 하나를 함께</b> 쓰고 있어서, 이름과 역할·말투만 각자 다르게 답합니다. 나중에 각 서비스의 유료 API 키를 연결하면 제미나이는 Gemini, 클로드는 Claude 처럼 각자 모델로 바꿀 수 있습니다.</p>
+        <p>채팅창에 <b>@all</b>(또는 @전체)을 쓰면 7명 AI가 모두 답하고, 아무 이름도 부르지 않으면 <b>혀니</b>가 먼저 답합니다. 📎 버튼·붙여넣기·끌어놓기로 사진과 파일을 올릴 수 있고, 사진을 올리고 부르면 AI가 사진을 보고 답합니다.</p>
         <p>AI 답글은 서버(Cloudflare Worker)에서 처리되고, Gemini 키는 서버에만 있어 방문자에게 노출되지 않습니다. AI 답글에는 자동 표시가 붙어 다시 다른 AI를 부르지 않습니다.</p>
         <p class="small">링크를 아는 사람은 누구나 들어올 수 있으니, 가족·직원 외에는 공유하지 마세요.</p>
       </div>
@@ -204,11 +211,23 @@
   </div>
 </div>
 
+<!-- ─────────── 사진 크게 보기(라이트박스) ─────────── -->
+<div class="lightbox hidden" id="lightbox">
+  <div class="lb-bar">
+    <span class="lb-name" id="lb-name">사진</span>
+    <span class="lb-acts">
+      <a class="btn tiny" id="lb-save">저장</a>
+      <button class="icon-btn lb-x" id="lb-close" aria-label="닫기">✕</button>
+    </span>
+  </div>
+  <div class="lb-stage" id="lb-stage"><img id="lb-img" alt=""></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-auth-compat.js"></script>
 <script src="vendor/firebase-database-compat.js"></script>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
