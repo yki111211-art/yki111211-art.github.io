@@ -836,7 +836,12 @@
 
   function scrollBottom(force) {
     const box = el('messages');
-    if (force) { requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; }); }
+    if (force) {
+      requestAnimationFrame(() => {
+        if (box) box.scrollTop = box.scrollHeight;
+        window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+      });
+    }
   }
 
   /* ── AI 멤버 자동응답 ────────────────────────────
@@ -1656,7 +1661,7 @@
       state.seen[state.room] = Date.now(); saveSeen();
       const msgs = (state.rooms[state.room] || {}).messages || {};
       const box = el('messages');
-      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+      const atBottom = (box.scrollHeight - box.scrollTop - box.clientHeight < 120) || (document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 180);
       renderTabs(); renderChatHead(); renderMessages(atBottom);
       if (atBottom) scrollBottom(true);
     });

@@ -381,6 +381,12 @@ input,textarea{font-family:inherit}
 }
 @media (max-width:860px){
   .only-mobile{display:inline-flex !important}
+  html,body{height:auto !important;overflow-x:hidden !important;overflow-y:auto !important;-webkit-overflow-scrolling:touch}
+  .app{position:static !important;height:auto !important;min-height:100dvh;overflow:visible !important}
+  .topbar{position:sticky;top:0;z-index:30;background:#fbf7f0}
+  .tabs{position:sticky;top:54px;z-index:29;background:#fbf7f0}
+  .workspace,.chat,.messages{flex:none !important;height:auto !important;min-height:0 !important;overflow:visible !important}
+  .composer{position:sticky;bottom:0;z-index:30;background:#fbf7f0;border-top:1px solid var(--line)}
   .brand-sub{display:none}
   .topbar{padding:10px 12px;gap:8px}
   .topbar-right .btn .lbl{display:none}
