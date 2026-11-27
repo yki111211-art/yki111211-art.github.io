@@ -236,7 +236,7 @@
   function enterApp(id) {
     const m = state.members[id];
     trace.push('enterApp ' + id + ' ' + (m ? 'ok' : 'missing'));
-    if (!m) return showLogin();
+    if (!m || !m.id) return showLogin();
     if (state.me && state.me.id === id && screen === 'app') return;
     state.me = m;
     state.reply = null;
@@ -810,8 +810,11 @@
 
     db.ref('members').on('value', snap => {
       const obj = snap.val() || {};
-      state.members = obj;
-      state.list = sortMembers(obj);
+      const list = sortMembers(obj);
+      const byId = {};
+      list.forEach(mm => { byId[mm.id] = mm; });
+      state.members = byId;
+      state.list = list;
       trace.push('members ' + state.list.length + ' screen=' + screen);
       if (!state.list.length) return;
 
