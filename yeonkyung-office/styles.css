@@ -199,6 +199,7 @@ input,textarea{font-family:inherit}
 .msg-meta{display:flex;align-items:center;gap:7px;font-size:12px;padding:0 2px;flex-wrap:wrap}
 .msg-meta .who{font-weight:800;letter-spacing:-.015em}
 .msg-meta .role{font-size:11px;color:var(--muted);background:rgba(120,100,80,.07);border-radius:6px;padding:1.5px 6px}
+.msg-meta .auto-tag{font-size:10px;font-weight:800;color:var(--accent-ink);background:var(--accent-soft);border:1px solid #efc9b6;border-radius:5px;padding:1px 5px;letter-spacing:-.01em}
 .msg-meta .time{font-size:11px;color:#a9a094;font-variant-numeric:tabular-nums}
 .msg.me .msg-meta{flex-direction:row-reverse}
 
@@ -278,6 +279,11 @@ input,textarea{font-family:inherit}
 #rp-text{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60vw,520px)}
 .rp-arrow{color:var(--accent);font-weight:800}
 .typing-line{font-size:11.5px;color:var(--muted);height:15px;margin-top:5px;padding-left:4px}
+
+.ai-hint{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;line-height:1.45;color:var(--ink-2);background:rgba(194,96,63,.06);border:1px solid #f0dccd;border-radius:10px;padding:6px 8px 6px 10px;margin-bottom:8px}
+.ai-hint b{color:var(--accent-ink);font-weight:800}
+.ai-hint.hidden{display:none}
+.ai-hint .icon-btn{width:22px;height:22px;font-size:11px;flex:none}
 
 /* 멘션 자동완성 */
 .mention-pop{

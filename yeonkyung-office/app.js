@@ -21,6 +21,15 @@
   const db = firebase.database();
   const TS = firebase.database.ServerValue.TIMESTAMP;
 
+  /* ── AI 자동응답 (Cloudflare Worker 프록시 → 무료 Gemini) ──
+     API 키는 Worker 서버에만 있고 브라우저로 내려오지 않습니다. */
+  const AI_ENGINE = {
+    proxy: 'https://yk-gemini.yeonkyung-office.workers.dev/',
+    contextSize: 12,      // 방에서 함께 보낼 최근 메시지 수
+    maxPerMessage: 2,     // 한 메시지에 최대 몇 명까지 답할지
+    timeoutMs: 35000
+  };
+
   /* ── 고정 데이터 ─────────────────────────────── */
   const ROOMS = [
     { id: 'council', emoji: '🏛️', name: '대회의실', color: '#c08a3e', desc: '가게 · 법무 · 홍보 전원이 함께 보는 회의방' },
@@ -421,6 +430,7 @@
     meta.className = 'msg-meta';
     meta.innerHTML = '<span class="who">' + esc(m.name) + '</span>' +
       (m.role ? '<span class="role">' + esc(m.role) + '</span>' : '') +
+      (msg.auto ? '<span class="auto-tag">자동응답</span>' : '') +
       '<span class="time">' + esc(fmtTime(msg.ts)) + '</span>';
 
     const bubble = document.createElement('div');
@@ -534,13 +544,17 @@
       ts: TS,
       replyTo: state.reply ? { id: state.reply.id, memberId: state.reply.memberId, text: state.reply.text } : null
     };
+    const roomId = state.room;
     const finish = () => { sending = false; el('send').disabled = false; };
-    db.ref('rooms/' + state.room + '/messages').push(payload).then(() => {
+    const ref = db.ref('rooms/' + roomId + '/messages').push(payload);
+    const newId = ref.key;
+    ref.then(() => {
       ta.value = ''; autoGrow(ta);
       state.reply = null; renderReply();
-      db.ref('typing/' + state.room + '/' + state.me.id).remove().catch(() => {});
+      db.ref('typing/' + roomId + '/' + state.me.id).remove().catch(() => {});
       scrollBottom(true);
       finish();
+      callAiMembers(roomId, Object.assign({ id: newId }, payload));
     }, err => {
       console.error(err);
       toast('전송하지 못했습니다. 연결을 확인해 주세요.');
@@ -551,6 +565,111 @@
   function scrollBottom(force) {
     const box = el('messages');
     if (force) { requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; }); }
+  }
+
+  /* ── AI 멤버 자동응답 ────────────────────────────
+     · 사람이 보낸 메시지에서 AI 멤버 이름(@이름 또는 이름)을 찾아 그 멤버로 답글을 남깁니다.
+     · AI가 쓴 답글은 auto:true 로 기록되고, auto 메시지는 다시 AI를 부르지 않습니다(무한 반복 방지).
+     · AI 이름으로 로그인한 화면에서는 자동응답이 돌지 않습니다. */
+  const aiBusy = {};
+
+  function findAiTargets(text, senderId) {
+    const src = String(text || '');
+    const hits = [];
+    state.list.forEach(m => {
+      if (!m || m.kind !== 'ai' || m.id === senderId) return;
+      const name = String(m.name || '').trim();
+      if (!name) return;
+      if (src.indexOf('@' + name) !== -1) { hits.push({ m: m, rank: 0 }); return; }
+      const re = new RegExp('(^|[^가-힣A-Za-z0-9_])' + escRe(name) + '($|[^가-힣A-Za-z0-9_])');
+      if (re.test(src)) hits.push({ m: m, rank: 1 });
+    });
+    hits.sort((a, b) => a.rank - b.rank || (a.m.order || 99) - (b.m.order || 99));
+    return hits.slice(0, AI_ENGINE.maxPerMessage).map(h => h.m);
+  }
+
+  function callAiMembers(roomId, trigger) {
+    if (!state.me || state.me.kind === 'ai') return;
+    if (trigger.auto) return;
+    const targets = findAiTargets(trigger.text, state.me.id);
+    if (!targets.length) return;
+    targets.reduce((p, m) => p.then(() => aiReply(roomId, m, trigger)), Promise.resolve());
+  }
+
+  function aiContext(roomId, trigger) {
+    const raw = (state.rooms[roomId] || {}).messages || {};
+    const list = Object.keys(raw).map(id => Object.assign({ id: id }, raw[id]))
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0))
+      .slice(-AI_ENGINE.contextSize)
+      .map(m => ({
+        name: memberName(m.memberId),
+        ai: (memberById(m.memberId) || {}).kind === 'ai',
+        text: String(m.text || '').slice(0, 700)
+      }));
+    // 방금 보낸 메시지가 아직 목록에 반영되지 않았을 수 있으니 마지막에 확실히 붙인다
+    if (trigger && trigger.text) {
+      const t = String(trigger.text).slice(0, 700);
+      const last = list[list.length - 1];
+      if (!last || last.text !== t) {
+        list.push({ name: memberName(trigger.memberId), ai: false, text: t });
+      }
+    }
+    return list;
+  }
+
+  function askAiEngine(roomId, member, trigger) {
+    const body = {
+      memberId: member.id,
+      memberName: member.name,
+      memberRole: member.role || '',
+      room: roomId,
+      messages: aiContext(roomId, trigger)
+    };
+    const ctrl = window.AbortController ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), AI_ENGINE.timeoutMs) : null;
+    return fetch(AI_ENGINE.proxy, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(res => res.json().catch(() => null).then(data => {
+      if (timer) clearTimeout(timer);
+      if (!res.ok || !data || !data.ok) {
+        throw new Error((data && (data.error || data.message)) || ('HTTP ' + res.status));
+      }
+      return String(data.text || '').trim();
+    })).catch(err => { if (timer) clearTimeout(timer); throw err; });
+  }
+
+  function aiReply(roomId, member, trigger) {
+    const key = roomId + '/' + member.id;
+    if (aiBusy[key]) return Promise.resolve();
+    aiBusy[key] = true;
+    const typingRef = db.ref('typing/' + roomId + '/' + member.id);
+    const beatTyping = () => typingRef.set({ name: member.name, ts: Date.now() }).catch(() => {});
+    beatTyping();
+    const beat = setInterval(beatTyping, 3500);
+    return askAiEngine(roomId, member, trigger).then(text => {
+      if (!text) return null;
+      return db.ref('rooms/' + roomId + '/messages').push({
+        memberId: member.id,
+        text: text.slice(0, 1200),
+        ts: TS,
+        auto: true,
+        replyTo: {
+          id: trigger.id,
+          memberId: trigger.memberId,
+          text: String(trigger.text || '').slice(0, 200)
+        }
+      });
+    }).catch(err => {
+      console.warn('AI 응답 실패', member.name, err);
+      if (state.room === roomId) toast(member.name + ' 연결이 잠시 막혔어요. 조금 뒤에 다시 불러 주세요.');
+    }).then(() => {
+      clearInterval(beat);
+      typingRef.remove().catch(() => {});
+      delete aiBusy[key];
+    });
   }
 
   function toggleReaction(msgId, emoji) {
@@ -930,6 +1049,13 @@
 
     el('btn-copy-all').addEventListener('click', copyAllInvites);
     el('btn-add-member').addEventListener('click', addMember);
+
+    const aiHint = el('ai-hint');
+    if (localStorage.getItem('yk_ai_hint') === 'off') aiHint.classList.add('hidden');
+    el('ai-hint-close').addEventListener('click', () => {
+      aiHint.classList.add('hidden');
+      try { localStorage.setItem('yk_ai_hint', 'off'); } catch (e) {}
+    });
 
     document.querySelectorAll('[data-close]').forEach(b => {
       b.addEventListener('click', () => closeModal(b.getAttribute('data-close')));

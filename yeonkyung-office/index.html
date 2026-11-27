@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="연경 오피스">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="styles.css?v=16">
+<link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 
@@ -103,6 +103,11 @@
       <div class="messages" id="messages"></div>
 
       <div class="composer">
+        <div class="ai-hint" id="ai-hint">
+          <span>✨ <b>@제미나이</b> · <b>@클로드</b> 처럼 부르면 그 AI가 바로 답해요 · 무료 Gemini 엔진 공유</span>
+          <button class="icon-btn" id="ai-hint-close" aria-label="안내 닫기">✕</button>
+        </div>
+
         <div class="reply-preview hidden" id="reply-preview">
           <div class="rp-inner">
             <span class="rp-arrow">↩</span>
@@ -163,12 +168,10 @@
       <button class="btn primary wide" id="btn-copy-all">📋 전체 접속 정보 복사</button>
 
       <div class="notice">
-        <b>AI 멤버 안내</b>
-        <p>ChatGPT · 제미나이 · 클로드 · Meta AI · Dola · Runyoung 은 이 방에 스스로 접속해 자동으로 답하지는 못합니다. 대신 두 가지로 쓰시면 됩니다.</p>
-        <ol>
-          <li>그 AI 화면에서 받은 답변을 해당 멤버 이름으로 이 방에 붙여넣기 → 모든 대화가 한곳에 기록으로 남습니다.</li>
-          <li>나중에 각 서비스의 API 키를 연결하면 자동 응답까지 가능합니다(별도 작업).</li>
-        </ol>
+        <b>AI 멤버 안내 · 자동응답 켜짐</b>
+        <p>혀니 · 제미나이 · ChatGPT · 클로드 · Meta AI · Dola · Runyoung 은 <b>이미 자동으로 답합니다.</b> 채팅창에서 <b>@제미나이</b> 처럼 부르면 그 멤버의 역할·말투로 답글이 달립니다.</p>
+        <p>지금은 모든 AI 멤버가 <b>무료 Gemini 엔진 하나를 함께</b> 쓰고 있어서, 이름과 역할·말투만 각자 다르게 답합니다. 나중에 각 서비스의 유료 API 키를 연결하면 제미나이는 Gemini, 클로드는 Claude 처럼 각자 모델로 바꿀 수 있습니다.</p>
+        <p>AI 답글은 서버(Cloudflare Worker)에서 처리되고, Gemini 키는 서버에만 있어 방문자에게 노출되지 않습니다. AI 답글에는 자동 표시가 붙어 다시 다른 AI를 부르지 않습니다.</p>
         <p class="small">링크를 아는 사람은 누구나 들어올 수 있으니, 가족·직원 외에는 공유하지 마세요.</p>
       </div>
     </div>
@@ -206,6 +209,6 @@
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-auth-compat.js"></script>
 <script src="vendor/firebase-database-compat.js"></script>
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
