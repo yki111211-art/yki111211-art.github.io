@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f8f4ec">
+<title>연경 오피스</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23c2603f'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' fill='%23fff'%3E%E1%84%8B%E1%85%A7%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ─────────── 부팅 / 연결 중 ─────────── -->
+<div id="boot" class="screen boot">
+  <div class="boot-card">
+    <div class="brand-mark">여</div>
+    <div class="boot-title">연경 오피스</div>
+    <div class="boot-msg" id="boot-msg">연결하는 중…</div>
+    <div class="spinner" aria-hidden="true"></div>
+  </div>
+</div>
+
+<!-- ─────────── 로그인 ─────────── -->
+<div id="login" class="screen login hidden">
+  <div class="login-wrap">
+    <div class="login-brand">
+      <div class="brand-mark">여</div>
+      <div>
+        <h1>연경 오피스</h1>
+        <p>AI 직원들과 함께하는 실시간 협업 데스크</p>
+      </div>
+    </div>
+
+    <div class="login-card">
+      <div class="step step-pick" id="step-pick">
+        <div class="step-head">
+          <h2>누구로 들어오실까요?</h2>
+          <p>이름을 고르고 4자리 PIN을 넣으면 바로 입장합니다.</p>
+        </div>
+        <div class="member-grid" id="login-grid"></div>
+      </div>
+
+      <div class="step step-pin hidden" id="step-pin">
+        <button class="link-back" id="pin-back">← 멤버 다시 고르기</button>
+        <div class="pin-who">
+          <div class="avatar big" id="pin-avatar">👑</div>
+          <div>
+            <h2 id="pin-name">연경 대표님</h2>
+            <p id="pin-role">대표님 · 총괄</p>
+          </div>
+        </div>
+        <label class="pin-label" for="pin-input">4자리 PIN</label>
+        <input id="pin-input" class="pin-input" type="tel" inputmode="numeric" autocomplete="one-time-code" maxlength="4" placeholder="••••">
+        <div class="pin-hint" id="pin-hint">PIN을 잊으셨다면 다른 기기에서 ‘🔑 멤버별 접속 안내’를 열어 확인하세요.</div>
+        <button class="btn primary wide" id="pin-submit">입장하기</button>
+      </div>
+    </div>
+
+    <p class="login-foot">연경님의 가게 · 법무 · 홍보 · AI 직원이 한 방에서 대화합니다.</p>
+  </div>
+</div>
+
+<!-- ─────────── 앱 ─────────── -->
+<div id="app" class="app hidden">
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand-mark small">여</div>
+      <div class="brand-text">
+        <div class="brand-name">연경 오피스</div>
+        <div class="brand-sub" id="brand-sub">실시간 협업 데스크</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill" id="status-pill"><span class="dot"></span> ON <b id="on-count">0</b>명</div>
+      <button class="btn ghost" id="btn-invite">🔑 <span class="lbl">멤버별 접속 안내</span></button>
+      <button class="btn ghost only-mobile" id="btn-people">👥 <span class="lbl">멤버</span></button>
+      <button class="btn ghost" id="btn-logout"><span class="lbl">로그아웃</span><span class="only-mobile">⎋</span></button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <main class="workspace">
+    <section class="chat">
+      <div class="chat-head">
+        <div class="chat-title">
+          <h2 id="room-title">🏛️ 대회의실</h2>
+          <p id="room-desc">가게 · 법무 · 홍보 전원이 함께 보는 회의방</p>
+        </div>
+        <div class="chat-meta">
+          <span id="room-count">0개 메시지</span>
+          <span class="me-chip" id="me-chip">👑 연경 대표님</span>
+        </div>
+      </div>
+
+      <div class="messages" id="messages"></div>
+
+      <div class="composer">
+        <div class="reply-preview hidden" id="reply-preview">
+          <div class="rp-inner">
+            <span class="rp-arrow">↩</span>
+            <div>
+              <b id="rp-who">혀니</b>
+              <span id="rp-text">메시지</span>
+            </div>
+          </div>
+          <button class="icon-btn" id="rp-cancel" aria-label="답글 취소">✕</button>
+        </div>
+
+        <div class="composer-row">
+          <div class="mention-pop hidden" id="mention-pop"></div>
+          <textarea id="input" rows="1" placeholder="메시지를 입력하세요  ·  Enter 전송 / Shift+Enter 줄바꿈"></textarea>
+          <button class="send-btn" id="send" aria-label="전송">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l.1 6.5L15 12 3.5 13.9z" fill="currentColor"/></svg>
+          </button>
+        </div>
+        <div class="typing-line" id="typing-line"></div>
+      </div>
+    </section>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div>
+          <h3>참여 멤버</h3>
+          <p id="member-count">8명</p>
+        </div>
+        <div class="sidebar-head-actions">
+          <button class="btn tiny" id="btn-manage">＋ 멤버 추가·수정</button>
+          <button class="icon-btn only-mobile" id="btn-close-people" aria-label="닫기">✕</button>
+        </div>
+      </div>
+      <div class="member-list" id="member-list"></div>
+      <div class="sidebar-foot">
+        <span class="live-dot"></span> 실시간 연결됨 · Firebase
+      </div>
+    </aside>
+
+    <div class="scrim" id="scrim"></div>
+  </main>
+</div>
+
+<!-- ─────────── 모달: 멤버별 접속 안내 ─────────── -->
+<div class="modal hidden" id="modal-invite">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>🔑 멤버별 접속 안내</h3>
+      <button class="icon-btn" data-close="modal-invite" aria-label="닫기">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-lead">아래 링크를 그 멤버의 기기에서 열면, 그 이름으로 이 방에 들어옵니다. PIN이 링크에 포함되어 있어 한 번만 누르면 됩니다.</p>
+
+      <div class="invite-hero" id="invite-hero"></div>
+
+      <div class="invite-list" id="invite-list"></div>
+
+      <button class="btn primary wide" id="btn-copy-all">📋 전체 접속 정보 복사</button>
+
+      <div class="notice">
+        <b>AI 멤버 안내</b>
+        <p>ChatGPT · 제미나이 · 클로드 · Meta AI · Dola · Runyoung 은 이 방에 스스로 접속해 자동으로 답하지는 못합니다. 대신 두 가지로 쓰시면 됩니다.</p>
+        <ol>
+          <li>그 AI 화면에서 받은 답변을 해당 멤버 이름으로 이 방에 붙여넣기 → 모든 대화가 한곳에 기록으로 남습니다.</li>
+          <li>나중에 각 서비스의 API 키를 연결하면 자동 응답까지 가능합니다(별도 작업).</li>
+        </ol>
+        <p class="small">링크를 아는 사람은 누구나 들어올 수 있으니, 가족·직원 외에는 공유하지 마세요.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── 모달: 멤버 관리 ─────────── -->
+<div class="modal hidden" id="modal-members">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>＋ 멤버 추가 · 수정</h3>
+      <button class="icon-btn" data-close="modal-members" aria-label="닫기">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-lead">이름 · 역할 · 이모지 · PIN을 바꾸면 모든 멤버 화면에 바로 반영됩니다.</p>
+      <div class="edit-list" id="edit-list"></div>
+
+      <div class="add-box">
+        <h4>새 멤버 추가</h4>
+        <div class="add-grid">
+          <input id="new-emoji" class="inp emoji-inp" maxlength="4" placeholder="🙂" value="🙂">
+          <input id="new-name" class="inp" placeholder="이름 (예: 마케팅 실장)">
+          <input id="new-role" class="inp" placeholder="역할 (예: 광고 · SNS)">
+          <input id="new-pin" class="inp" inputmode="numeric" maxlength="4" placeholder="PIN 4자리">
+        </div>
+        <div class="emoji-quick" id="emoji-quick"></div>
+        <button class="btn primary wide" id="btn-add-member">멤버 추가하기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-auth-compat.js"></script>
+<script src="vendor/firebase-database-compat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
