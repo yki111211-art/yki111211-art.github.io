@@ -155,18 +155,22 @@
   }
 
   /* ── 화면 전환 ────────────────────────────────── */
+  let screen = 'boot';
+  const trace = (window.__ykTrace = []);
+  window.addEventListener('error', e => trace.push('ERR ' + e.message));
+
   function hideAll() {
     ['boot', 'login', 'app'].forEach(k => el(k).classList.add('hidden'));
   }
   function showBoot(msg) {
-    hideAll(); el('boot').classList.remove('hidden');
+    screen = 'boot'; hideAll(); el('boot').classList.remove('hidden');
     if (msg) el('boot-msg').textContent = msg;
   }
   function showLogin(preselect) {
-    hideAll(); el('login').classList.remove('hidden');
+    screen = 'login'; hideAll(); el('login').classList.remove('hidden');
     renderLoginGrid();
     if (preselect && state.members[preselect]) pickMember(preselect);
-    else showStep('pick');
+    else { state.pendingId = null; showStep('pick'); }
   }
   function showStep(which) {
     el('step-pick').classList.toggle('hidden', which !== 'pick');
@@ -205,6 +209,7 @@
 
   function tryPin() {
     const m = state.members[state.pendingId];
+    trace.push('tryPin ' + state.pendingId + ' ' + (m ? 'found' : 'missing'));
     if (!m) return showLogin();
     const val = (el('pin-input').value || '').trim();
     if (val === String(m.pin || '').trim()) {
@@ -221,11 +226,12 @@
   /* ── 입장 / 퇴장 ──────────────────────────────── */
   function enterApp(id) {
     const m = state.members[id];
+    trace.push('enterApp ' + id + ' ' + (m ? 'ok' : 'missing'));
     if (!m) return showLogin();
-    if (state.me && state.me.id === id && !el('app').classList.contains('hidden')) return;
+    if (state.me && state.me.id === id && screen === 'app') return;
     state.me = m;
     state.reply = null;
-    hideAll(); el('app').classList.remove('hidden');
+    screen = 'app'; hideAll(); el('app').classList.remove('hidden');
     renderAll(true);
     goRoom(state.room, true);
     startPresence();
@@ -239,7 +245,7 @@
       db.ref('typing/' + state.room + '/' + m.id).remove().catch(() => {});
     }
     localStorage.removeItem(LS_ID);
-    state.me = null;
+    state.me = null; screen = 'boot';
     const base = location.origin + location.pathname;
     location.replace(base);
   }
@@ -304,14 +310,13 @@
   function renderHeader() {
     el('brand-sub').textContent = state.list.length + '인 오피스 · 실시간 협업 데스크';
     const on = Object.keys(state.presence).filter(k => state.presence[k] && state.presence[k].online).length;
-    el('on-count').textContent = on;
     const pill = el('status-pill');
     if (!state.connected) {
-      pill.innerHTML = '<span class="dot" style="background:#c9a227;animation:none"></span> 연결 중…';
-      pill.style.background = '#fdf6e3'; pill.style.borderColor = '#f0e2b8'; pill.style.color = '#8a6d1f';
+      pill.className = 'status-pill off';
+      pill.innerHTML = '<span class="dot"></span> 연결 중…';
     } else {
-      pill.innerHTML = '<span class="dot"></span> ON <b id="on-count">' + on + '</b>명';
-      pill.style.background = ''; pill.style.borderColor = ''; pill.style.color = '';
+      pill.className = 'status-pill';
+      pill.innerHTML = '<span class="dot"></span> ON <b>' + on + '</b>명';
     }
   }
 
@@ -790,21 +795,24 @@
       const obj = snap.val() || {};
       state.members = obj;
       state.list = sortMembers(obj);
-      const stored = localStorage.getItem(LS_ID);
-      if (!el('app').classList.contains('hidden') && state.me) {
+      trace.push('members ' + state.list.length + ' screen=' + screen);
+      if (!state.list.length) return;
+
+      if (screen === 'app' && state.me) {
         const fresh = state.members[state.me.id];
-        if (!fresh) { state.me = null; showLogin(); return; }
+        if (!fresh) { logout(); return; }
         state.me = fresh;
-        renderAll(); renderLoginGrid(); renderMemberEditorIfOpen();
-      } else if (state.list.length) {
-        const params = new URLSearchParams(location.search);
-        const urlM = params.get('m'), urlPin = params.get('pin');
-        if (stored && state.members[stored] && !state.booted) { state.booted = true; enterApp(stored); return; }
-        if (urlM && state.members[urlM] && urlPin != null) {
-          if (String(state.members[urlM].pin) === String(urlPin)) { localStorage.setItem(LS_ID, urlM); state.booted = true; enterApp(urlM); return; }
-        }
-        state.booted = true;
-        showLogin(urlM && state.members[urlM] ? urlM : null);
+        renderAll();
+        renderMemberEditorIfOpen();
+        return;
+      }
+      if (!state.booted) { resolveInitialScreen(); return; }
+      if (screen === 'login') {
+        const keep = state.pendingId;
+        renderLoginGrid();
+        renderMemberEditorIfOpen();
+        if (keep && state.members[keep]) { state.pendingId = keep; showStep('pin'); }
+        else { state.pendingId = null; showStep('pick'); }
       }
     });
 
@@ -824,6 +832,21 @@
       renderTabs(); renderChatHead(); renderMessages(atBottom);
       if (atBottom) scrollBottom(true);
     });
+  }
+
+  function resolveInitialScreen() {
+    if (state.booted) return;
+    state.booted = true;
+    const params = new URLSearchParams(location.search);
+    const urlM = params.get('m'), urlPin = params.get('pin');
+    const stored = localStorage.getItem(LS_ID);
+    if (stored && state.members[stored]) { enterApp(stored); return; }
+    if (urlM && state.members[urlM] && urlPin != null && String(state.members[urlM].pin) === String(urlPin)) {
+      localStorage.setItem(LS_ID, urlM);
+      enterApp(urlM);
+      return;
+    }
+    showLogin(urlM && state.members[urlM] ? urlM : null);
   }
 
   function renderMemberEditorIfOpen() {
