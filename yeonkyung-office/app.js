@@ -211,7 +211,7 @@
     el('pin-role').textContent = m.role || '';
     const inp = el('pin-input');
     inp.value = ''; inp.classList.remove('err');
-    el('pin-hint').textContent = 'PIN을 잊으셨다면 다른 기기에서 ‘🔑 멤버별 접속 안내’를 열어 확인하세요.';
+    el('pin-hint').textContent = 'PIN을 잊으시면 혀니에게 “내 PIN 알려줘”라고 하시면 됩니다.';
     showStep('pin');
     setTimeout(() => inp.focus(), 60);
   }
@@ -227,7 +227,7 @@
     } else {
       const inp = el('pin-input');
       inp.classList.add('err'); inp.value = '';
-      el('pin-hint').textContent = 'PIN이 맞지 않습니다. 다시 입력해 주세요.';
+      el('pin-hint').textContent = 'PIN이 맞지 않습니다. 다시 입력하시거나 혀니에게 물어봐 주세요.';
       setTimeout(() => inp.classList.remove('err'), 400);
     }
   }
