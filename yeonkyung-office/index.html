@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="연경 오피스">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="styles.v25.css">
+<link rel="stylesheet" href="styles.v26.css">
 </head>
 <body>
 
@@ -158,7 +158,7 @@
       <div class="member-list" id="member-list"></div>
       <div class="sidebar-foot">
         <span class="live-dot"></span> 실시간 연결됨 · Firebase
-        <span class="ver" id="ver-tag">v25</span>
+        <span class="ver" id="ver-tag">v26</span>
       </div>
     </aside>
 
@@ -206,7 +206,8 @@
       <div class="status-grid" id="status-grid"></div>
       <div class="engine-card">
         <b>응답 엔진</b>
-        <p>AI 멤버 7명이 무료 Gemini(gemini-3.5-flash-lite) 엔진 하나를 함께 쓰고, 이름 · 역할 · 말투만 각자 다릅니다. 답글은 Cloudflare Worker를 거쳐 가고 Gemini 키는 서버에만 있습니다.</p>
+        <p>AI 멤버 7명이 무료 Gemini(gemini-3.5-flash-lite) 엔진 하나를 함께 쓰고, 이름 · 역할 · 말투만 각자 다릅니다. 답글은 Google Apps Script(script.google.com) 서버를 거쳐 가고 Gemini 키는 서버에만 있습니다.</p>
+        <p class="small">베트남 통신사 망에서 Cloudflare workers.dev가 막히는 문제 때문에 프록시를 Google Apps Script로 옮겼습니다(v26).</p>
         <p class="small">@all 이면 7명이 0.6초 간격으로 차례로 답하고, 멘션이 없으면 혀니가 먼저 답합니다. 사진을 올리고 부르면 AI가 사진을 보고 답합니다.</p>
       </div>
     </div>
@@ -255,7 +256,7 @@
         <p>혀니 · 제미나이 · ChatGPT · 클로드 · Meta AI · Dola · Runyoung 은 <b>이미 자동으로 답합니다.</b> 채팅창에서 <b>@제미나이</b> 처럼 부르면 그 멤버의 역할·말투로 답글이 달립니다.</p>
         <p>지금은 모든 AI 멤버가 <b>무료 Gemini 엔진 하나를 함께</b> 쓰고 있어서, 이름과 역할·말투만 각자 다르게 답합니다. 나중에 각 서비스의 유료 API 키를 연결하면 제미나이는 Gemini, 클로드는 Claude 처럼 각자 모델로 바꿀 수 있습니다.</p>
         <p>채팅창에 <b>@all</b>(또는 @전체)을 쓰면 7명 AI가 모두 답하고, 아무 이름도 부르지 않으면 <b>혀니</b>가 먼저 답합니다. 📎 버튼·붙여넣기·끌어놓기로 사진과 파일을 올릴 수 있고, 사진을 올리고 부르면 AI가 사진을 보고 답합니다.</p>
-        <p>AI 답글은 서버(Cloudflare Worker)에서 처리되고, Gemini 키는 서버에만 있어 방문자에게 노출되지 않습니다. AI 답글에는 자동 표시가 붙어 다시 다른 AI를 부르지 않습니다.</p>
+        <p>AI 답글은 서버(Google Apps Script)에서 처리되고, Gemini 키는 서버에만 있어 방문자에게 노출되지 않습니다. AI 답글에는 자동 표시가 붙어 다시 다른 AI를 부르지 않습니다.</p>
         <p class="small">링크를 아는 사람은 누구나 들어올 수 있으니, 가족·직원 외에는 공유하지 마세요.</p>
       </div>
     </div>
@@ -305,6 +306,6 @@
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-auth-compat.js"></script>
 <script src="vendor/firebase-database-compat.js"></script>
-<script src="app.v25.js"></script>
+<script src="app.v26.js"></script>
 </body>
 </html>

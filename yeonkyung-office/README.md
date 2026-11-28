@@ -11,15 +11,20 @@ GitHub Pages로 배포됩니다.
 ## AI 자동응답 구조
 
 ```
-브라우저(app.js)  ──POST──▶  Cloudflare Worker(프록시)  ──▶  Google Gemini API
-   멘션 감지·답글저장            API 키 보관·페르소나 주입       gemini-3.5-flash-lite (무료 등급)
+브라우저(app.v26.js)  ──POST──▶  Google Apps Script(프록시)  ──▶  Google Gemini API
+   멘션 감지·답글저장               API 키 보관·페르소나 주입        gemini-3.5-flash-lite (무료 등급)
 ```
 
-- 프록시 주소: `https://yk-gemini.yeonkyung-office.workers.dev/` (Worker 이름 `yk-gemini`)
-- Gemini API 키는 Worker Secret `GEMINI_API_KEY` 에만 있고, 저장소·브라우저에는 없습니다.
+- 프록시 주소(v26): `https://script.google.com/macros/s/AKfycby0qVEli88-lbeHjvbs9eRhdhiOHNXd8GKs8AStmuPJONqIfB43x4jljLtTNo4ylbMr/exec`
+  (Google Apps Script 프로젝트 `yeonkyung-office-proxy`, scriptId `1fFB04VvLoKTXKXClU91Qb5UbOVIm2GvyhM5_v5O1jAUmJfponZQk4ert`, 배포 v4, 액세스 "모든 사용자")
+  - v25 이전에는 Cloudflare Worker `https://yk-gemini.yeonkyung-office.workers.dev/` 를 썼지만,
+    **베트남 통신사 망에서 `workers.dev` 가 차단**되어 `script.google.com` 으로 옮겼습니다.
+  - Apps Script 는 CORS preflight(OPTIONS)를 받지 않으므로, 앱은 `Content-Type: text/plain;charset=UTF-8` 로 POST합니다.
+- Gemini API 키는 Apps Script 스크립트 속성 `GEMINI_API_KEY` 에만 있고, 저장소·브라우저에는 없습니다.
 - 프로젝트: Google Cloud `yeonkyung-office-gemini` / 키는 서비스 계정
   `yeonkyung-office-worker@yeonkyung-office-gemini.iam.gserviceaccount.com` 에 묶여 있습니다.
-- Worker 소스: `work/cloudflare/yk-gemini-worker.js` (페르소나·모델·허용 도메인 수정은 여기서)
+- 프록시 소스: `work/gas-proxy/Code.gs` (Apps Script에 붙여 넣는 본문. 페르소나·모델 수정은 여기서)
+- 예전 Cloudflare Worker 소스: `work/cloudflare/yk-gemini-worker.js` (v25까지 사용)
 - 작동 방식
   - 사람이 보낸 메시지에서 AI 멤버 이름(`@제미나이`, `혀니야` 등)을 찾으면, 그 멤버 이름으로
     "입력 중…" 표시 후 최근 대화 12개를 Worker 에 보내 답글을 받아 인용 답글로 저장합니다.
@@ -33,6 +38,7 @@ GitHub Pages로 배포됩니다.
 
 - `index.html` 의 `styles.css?v=`, `app.js?v=` 숫자를 올려야 브라우저 캐시가 갱신됩니다.
 - GitHub Pages 는 HTML 을 몇 분간 캐시하므로, 배포 직후에는 새로고침을 한 번 해야 합니다.
+- v26부터는 파일명에 버전을 넣습니다(`styles.v26.css`, `app.v26.js`) — 캐시 꼬임 방지.
 
 ## v21 기능 요약
 
